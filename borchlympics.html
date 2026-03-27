@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏆 THE BORCHLYMPICS</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --gold: #FFD700; --silver: #C0C0C0; --bronze: #CD7F32;
+    --bg: #0a0a0f; --card: #12121a; --card2: #1a1a26;
+    --accent: #6c63ff; --accent2: #ff6584; --green: #4caf50;
+    --text: #e8e8f0; --muted: #666680; --border: #2a2a3a;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; }
+
+  /* SETUP */
+  #setup-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:radial-gradient(ellipse at center,#1a0a2e 0%,var(--bg) 70%); }
+  .setup-box { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:40px 32px; max-width:460px; width:100%; text-align:center; }
+  .setup-logo { font-family:'Bebas Neue',sans-serif; font-size:52px; letter-spacing:4px; background:linear-gradient(135deg,var(--gold),#fff,var(--gold)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .setup-tagline { font-size:12px; letter-spacing:3px; color:var(--accent); text-transform:uppercase; margin:6px 0 24px; }
+  .setup-steps { display:flex; gap:8px; margin-bottom:24px; }
+  .setup-step { flex:1; height:3px; border-radius:2px; background:var(--border); transition:background 0.3s; }
+  .setup-step.done { background:var(--accent); }
+  .setup-label { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; font-weight:600; text-align:left; display:block; }
+  .setup-input { width:100%; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:12px 14px; font-size:14px; outline:none; font-family:inherit; }
+  .setup-input:focus { border-color:var(--accent); }
+  .setup-hint { font-size:11px; color:var(--muted); margin-top:8px; line-height:1.7; text-align:left; }
+  .setup-hint a { color:var(--accent); text-decoration:none; }
+  .setup-hint a:hover { text-decoration:underline; }
+  .setup-divider { border:none; border-top:1px solid var(--border); margin:24px 0; }
+  .setup-btn { width:100%; padding:14px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; transition:all 0.2s; }
+  .setup-btn:hover { background:#7c74ff; transform:translateY(-1px); }
+  .setup-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .setup-error { color:var(--accent2); font-size:12px; margin-top:10px; min-height:18px; }
+  .guide-box { background:var(--card2); border-radius:10px; padding:16px; margin-top:16px; text-align:left; }
+
+  /* SYNC BAR */
+  #sync-bar { position:fixed; top:0; left:0; right:0; height:3px; background:var(--accent); transform:scaleX(0); transform-origin:left; transition:transform 0.3s,opacity 0.5s; z-index:9999; }
+  #sync-bar.active { transform:scaleX(1); }
+  #sync-bar.fade { opacity:0; }
+
+  /* HEADER */
+  .header { background:linear-gradient(135deg,#0a0a0f 0%,#1a0a2e 50%,#0a0a0f 100%); border-bottom:2px solid var(--accent); padding:28px 24px 20px; text-align:center; position:relative; overflow:hidden; }
+  .header::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse at center,rgba(108,99,255,.1) 0%,transparent 60%); pointer-events:none; }
+  .header h1 { font-family:'Bebas Neue',sans-serif; font-size:clamp(40px,9vw,84px); letter-spacing:6px; background:linear-gradient(135deg,var(--gold) 0%,#fff 50%,var(--gold) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .header .sub { font-size:11px; letter-spacing:4px; color:var(--accent); text-transform:uppercase; margin-top:4px; font-weight:500; }
+  .live-badge { display:inline-flex; align-items:center; gap:5px; background:rgba(76,175,80,.15); border:1px solid var(--green); border-radius:20px; padding:3px 10px; font-size:11px; color:var(--green); font-weight:600; margin-top:8px; }
+  .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* TABS */
+  .tabs { display:flex; background:var(--card); border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { padding:14px 16px; cursor:pointer; font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; transition:all .2s; }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* PAGES */
+  .page { display:none; padding:24px 20px; max-width:900px; margin:0 auto; }
+  .page.active { display:block; }
+  .section-title { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:3px; color:var(--gold); margin-bottom:16px; }
+
+  /* CARD */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .card-title { font-weight:700; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin-bottom:12px; }
+
+  /* STANDINGS */
+  .standings-podium { display:flex; justify-content:center; align-items:flex-end; gap:12px; margin-bottom:28px; padding:16px 0; }
+  .podium-slot { text-align:center; flex:1; max-width:150px; }
+  .podium-avatar { width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; margin:0 auto 6px; border:3px solid; }
+  .p1 .podium-avatar { border-color:var(--gold); background:rgba(255,215,0,.12); }
+  .p2 .podium-avatar { border-color:var(--silver); background:rgba(192,192,192,.08); }
+  .p3 .podium-avatar { border-color:var(--bronze); background:rgba(205,127,50,.08); }
+  .podium-block { border-radius:8px 8px 0 0; display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--bg); }
+  .p1 .podium-block { height:76px; background:var(--gold); }
+  .p2 .podium-block { height:56px; background:var(--silver); }
+  .p3 .podium-block { height:40px; background:var(--bronze); }
+  .podium-name { font-weight:700; font-size:13px; margin-bottom:2px; }
+  .podium-pts { font-size:11px; color:var(--muted); }
+
+  .stn-table { width:100%; border-collapse:collapse; }
+  .stn-table th { text-align:left; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); padding:8px 12px; border-bottom:1px solid var(--border); }
+  .stn-table td { padding:11px 12px; border-bottom:1px solid var(--border); font-size:13px; }
+  .stn-table tr:last-child td { border-bottom:none; }
+  .stn-table tr:hover td { background:var(--card2); }
+  .rbadge { width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+  .r1 { background:rgba(255,215,0,.15); color:var(--gold); border:1px solid var(--gold); }
+  .r2 { background:rgba(192,192,192,.1); color:var(--silver); border:1px solid var(--silver); }
+  .r3 { background:rgba(205,127,50,.1); color:var(--bronze); border:1px solid var(--bronze); }
+  .rX { background:var(--card2); color:var(--muted); border:1px solid var(--border); }
+
+  /* PROGRESS */
+  .progress-wrap { background:var(--border); border-radius:4px; height:5px; margin-top:8px; }
+  .progress-fill { height:100%; border-radius:4px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .5s; }
+
+  /* EVENTS */
+  .events-grid { display:grid; gap:10px; }
+  .event-card { background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .event-card.editing { border-color:var(--accent); }
+  .event-top { display:flex; align-items:center; gap:12px; }
+  .ev-num { font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--border); width:26px; text-align:center; flex-shrink:0; }
+  .ev-emoji { font-size:26px; width:34px; text-align:center; flex-shrink:0; cursor:pointer; transition:transform .15s; }
+  .ev-emoji:hover { transform:scale(1.2); }
+  .ev-details { flex:1; min-width:0; }
+  .ev-name { font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px; }
+  .ev-format { font-size:11px; color:var(--muted); margin-top:2px; }
+  .ev-actions { display:flex; gap:5px; flex-shrink:0; }
+  .icon-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--muted); padding:5px 8px; cursor:pointer; font-size:12px; transition:all .2s; font-family:inherit; line-height:1; }
+  .icon-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .icon-btn.del:hover:not(:disabled) { border-color:var(--accent2); color:var(--accent2); }
+  .icon-btn:disabled { opacity:.3; cursor:not-allowed; }
+  .ev-edit-area { margin-top:12px; }
+  .ev-edit-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .ev-edit-row input { flex:1; min-width:110px; background:var(--card); border:1px solid var(--accent); color:var(--text); border-radius:7px; padding:8px 10px; font-size:13px; outline:none; font-family:inherit; }
+  .emoji-picker { display:flex; flex-wrap:wrap; gap:5px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:8px; max-height:120px; overflow-y:auto; }
+  .emoji-opt { font-size:19px; cursor:pointer; padding:3px 5px; border-radius:5px; transition:background .15s; }
+  .emoji-opt:hover { background:var(--card2); }
+  .add-event-box { background:var(--card2); border:1px dashed var(--accent); border-radius:10px; padding:16px; margin-top:10px; }
+  .add-ev-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .add-ev-row input { flex:1; min-width:120px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:9px 12px; font-size:13px; outline:none; font-family:inherit; }
+  .add-ev-row input:focus { border-color:var(--accent); }
+
+  /* SCORES */
+  .score-row { background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .score-info { flex:1; min-width:120px; }
+  .score-name { font-weight:600; font-size:13px; }
+  .score-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .player-scores { display:flex; gap:8px; flex-wrap:wrap; }
+  .psi { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .psi label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  .psi select { background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 8px; font-size:12px; width:70px; outline:none; font-family:inherit; cursor:pointer; }
+  .psi select:focus { border-color:var(--accent); }
+
+  /* BUTTONS */
+  .btn { padding:10px 18px; border-radius:8px; border:none; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:.5px; font-family:inherit; transition:all .2s; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#7c74ff; transform:translateY(-1px); }
+  .btn-secondary { background:var(--card2); color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-danger { background:rgba(255,101,132,.12); color:var(--accent2); border:1px solid var(--accent2); }
+  .btn-danger:hover { background:rgba(255,101,132,.22); }
+  .btn-sm { padding:6px 12px; font-size:12px; }
+  .btn-row { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+
+  /* PLAYERS */
+  .players-list { display:grid; gap:10px; margin-bottom:16px; }
+  .player-item { background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; display:flex; align-items:center; gap:12px; }
+  .player-avatar { width:42px; height:42px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+  .player-name { font-weight:600; font-size:14px; }
+  .player-sub { font-size:11px; color:var(--muted); }
+  .ml-auto { margin-left:auto; }
+
+  /* RULES */
+  .rules-table { width:100%; border-collapse:collapse; }
+  .rules-table th { background:var(--card2); padding:10px 14px; text-align:left; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+  .rules-table td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; }
+  .rules-table tr:last-child td { border-bottom:none; }
+  .pb { display:inline-block; padding:2px 8px; border-radius:20px; font-weight:700; font-size:11px; }
+  .pb1 { background:rgba(255,215,0,.12); color:var(--gold); }
+  .pb2 { background:rgba(192,192,192,.1); color:var(--silver); }
+  .pb3 { background:rgba(205,127,50,.1); color:var(--bronze); }
+  .pbx { background:var(--card2); color:var(--muted); }
+
+  /* TOAST */
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--card2); border:1px solid var(--border); color:var(--text); padding:11px 22px; border-radius:10px; font-weight:600; font-size:13px; transition:transform .3s; z-index:9998; pointer-events:none; white-space:nowrap; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+
+  /* MISC */
+  input[type="text"] { background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 14px; font-size:13px; outline:none; font-family:inherit; width:100%; }
+  input[type="text"]:focus { border-color:var(--accent); }
+  .input-row { display:flex; gap:10px; margin-bottom:14px; }
+  .input-row input { flex:1; }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:4px; vertical-align:middle; }
+  .dot-green { background:var(--green); }
+  .dot-muted { background:var(--border); }
+
+  @media(max-width:480px) { .page{padding:14px 10px;} .score-row{gap:8px;} }
+</style>
+</head>
+<body>
+
+<div id="sync-bar"></div>
+
+<!-- ══════ SETUP SCREEN ══════ -->
+<div id="setup-screen">
+  <div class="setup-box">
+    <div style="font-size:36px;margin-bottom:4px;">👑</div>
+    <div class="setup-logo">Borchlympics</div>
+    <div class="setup-tagline">Live · Synced · Free</div>
+    <div class="setup-steps">
+      <div class="setup-step done" id="step1"></div>
+      <div class="setup-step" id="step2"></div>
+      <div class="setup-step" id="step3"></div>
+    </div>
+    <label class="setup-label">Firebase Realtime Database URL</label>
+    <input class="setup-input" id="db-url" type="text" placeholder="https://your-project-default-rtdb.firebaseio.com" />
+    <div class="setup-hint">
+      Paste your Firebase Realtime Database URL above.
+      <br><a href="#" onclick="toggleGuide(event)">Don't have one yet? See quick setup guide ↓</a>
+    </div>
+    <div id="firebase-guide" style="display:none;" class="guide-box">
+      <div style="font-size:12px;color:var(--muted);line-height:2.1;">
+        <strong style="color:var(--text);">2-minute free setup:</strong><br>
+        1. Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a><br>
+        2. <strong style="color:var(--text);">Add project</strong> → name it anything → Continue<br>
+        3. Left sidebar → <strong style="color:var(--text);">Build → Realtime Database</strong><br>
+        4. <strong style="color:var(--text);">Create Database</strong> → any location → <strong style="color:var(--text);">Start in test mode</strong><br>
+        5. Copy the URL at the top (e.g. <span style="color:var(--accent);font-size:11px;">https://project-rtdb.firebaseio.com</span>)<br>
+        6. Paste it above and hit Connect!
+      </div>
+    </div>
+    <hr class="setup-divider">
+    <button class="setup-btn" id="connect-btn" onclick="connectFirebase()">⚡ Connect &amp; Launch</button>
+    <div class="setup-error" id="setup-error"></div>
+    <div style="margin-top:18px;font-size:11px;color:var(--muted);">Your URL is saved locally — you won't need to re-enter it next time.</div>
+  </div>
+</div>
+
+<!-- ══════ MAIN APP ══════ -->
+<div id="main-app" style="display:none;">
+  <div class="header">
+    <span style="font-size:32px;display:block;margin-bottom:2px;">👑</span>
+    <h1>Borchlympics</h1>
+    <p class="sub">Ultimate Video Game Championship</p>
+    <div class="live-badge"><span class="live-dot"></span> Live &amp; Synced</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showPage('standings')">🏆 Standings</div>
+    <div class="tab" onclick="showPage('events')">🎮 Events</div>
+    <div class="tab" onclick="showPage('scoreboard')">📊 Scores</div>
+    <div class="tab" onclick="showPage('rules')">📋 Rules</div>
+    <div class="tab" onclick="showPage('players')">👥 Players</div>
+    <div class="tab" onclick="showPage('settings')">⚙️ Settings</div>
+  </div>
+
+  <!-- STANDINGS -->
+  <div id="page-standings" class="page active">
+    <div class="section-title">🏆 Championship Standings</div>
+    <div id="podium-area"></div>
+    <div class="card">
+      <div class="card-title">Full Leaderboard</div>
+      <table class="stn-table">
+        <thead><tr><th>Rank</th><th>Player</th><th>Pts</th><th>Wins</th><th>Played</th></tr></thead>
+        <tbody id="standings-body"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Tournament Progress</div>
+      <div id="progress-info" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>
+      <div class="progress-wrap"><div class="progress-fill" id="progress-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div id="page-events" class="page">
+    <div class="section-title">🎮 Events</div>
+    <div class="card" style="background:linear-gradient(135deg,#1a0a2e,#12121a);border-color:var(--accent);margin-bottom:18px;">
+      <div style="font-size:12px;line-height:1.8;color:var(--muted);">Click ✏️ to edit a game's name or format. Click the emoji to change it. Use ▲▼ to reorder. All changes sync live to every player's screen.</div>
+    </div>
+    <div class="events-grid" id="events-list"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="toggleAddForm()">＋ Add Custom Game</button>
+    </div>
+    <div id="add-event-box" class="add-event-box" style="display:none;">
+      <div class="card-title" style="margin-bottom:10px;">New Event</div>
+      <div style="margin-bottom:10px;">
+        <div class="setup-label">Choose Emoji</div>
+        <div id="add-emoji-picker" class="emoji-picker"></div>
+        <div style="font-size:11px;color:var(--accent);margin-top:6px;">Selected: <span id="sel-emoji">🎮</span></div>
+      </div>
+      <div class="add-ev-row">
+        <input id="new-ev-name" placeholder="Game name (e.g. Rocket League)" />
+        <input id="new-ev-fmt" placeholder="Format (e.g. 1 match, 5 min)" />
+      </div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-primary btn-sm" onclick="addEvent()">Add Event</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleAddForm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCORES -->
+  <div id="page-scoreboard" class="page">
+    <div class="section-title">📊 Enter Results</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">How it works</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;">Select each player's finishing position. Points update instantly and everyone's standings screen refreshes automatically — no page reload needed.</div>
+    </div>
+    <div id="score-inputs"></div>
+  </div>
+
+  <!-- RULES -->
+  <div id="page-rules" class="page">
+    <div class="section-title">📋 Official Rules</div>
+    <div class="card">
+      <div class="card-title">Points System</div>
+      <table class="rules-table">
+        <thead><tr><th>Finish</th><th>Points</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>🥇 1st</td><td><span class="pb pb1">10 pts</span></td><td>Event winner</td></tr>
+          <tr><td>🥈 2nd</td><td><span class="pb pb2">6 pts</span></td><td>Runner-up</td></tr>
+          <tr><td>🥉 3rd</td><td><span class="pb pb3">3 pts</span></td><td>Third place</td></tr>
+          <tr><td>🎖️ 4th+</td><td><span class="pb pbx">1 pt</span></td><td>Participation</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Tiebreakers</div>
+      <div style="font-size:13px;color:var(--muted);line-height:2.2;">
+        <div>1️⃣ <strong style="color:var(--text);">Most 1st place finishes</strong></div>
+        <div>2️⃣ <strong style="color:var(--text);">Most 2nd place finishes</strong></div>
+        <div>3️⃣ <strong style="color:var(--text);">Fall Guys sudden death</strong> — ultimate equalizer</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Default Game Rules</div>
+      <div style="font-size:12px;color:var(--muted);line-height:2.3;">
+        <div>⚽ <strong style="color:var(--text);">FIFA/FC</strong> — 1 match, 6-min halves</div>
+        <div>🏈 <strong style="color:var(--text);">NCAA 26 & Madden 26</strong> — 1 match, 4-min quarters</div>
+        <div>🏀 <strong style="color:var(--text);">NBA 2K26</strong> — 1 match, 6-min quarters</div>
+        <div>🥊 <strong style="color:var(--text);">UFC</strong> — Round robin, 3-round fights</div>
+        <div>⛳ <strong style="color:var(--text);">Golf With Friends</strong> — Full course, lowest score wins</div>
+        <div>🪂 <strong style="color:var(--text);">Fall Guys</strong> — Play until someone wins 1 episode</div>
+        <div>💣 <strong style="color:var(--text);">Battlefield</strong> — Team deathmatch, 10-min round</div>
+        <div>🎮 <strong style="color:var(--text);">Custom games</strong> — Agree on format before you play</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Max Possible Score</div>
+      <div style="font-size:13px;color:var(--muted);">With <span id="rules-event-count" style="color:var(--text);">8</span> events: <strong style="color:var(--gold);">max score = <span id="rules-max-score">80</span> pts</strong> (winning every event). Champion declared after all events are complete.</div>
+    </div>
+  </div>
+
+  <!-- PLAYERS -->
+  <div id="page-players" class="page">
+    <div class="section-title">👥 Players</div>
+    <div class="input-row">
+      <input type="text" id="new-player-name" placeholder="Enter player name..." maxlength="20" onkeydown="if(event.key==='Enter')addPlayer()" />
+      <button class="btn btn-primary" onclick="addPlayer()">Add</button>
+    </div>
+    <div class="players-list" id="players-list"></div>
+    <div style="font-size:11px;color:var(--muted);">Supports up to 8 players. Removing a player deletes their scores.</div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="page-settings" class="page">
+    <div class="section-title">⚙️ Settings</div>
+    <div class="card">
+      <div class="card-title">Firebase Connection</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Connected to:</div>
+      <div id="cur-db-url" style="font-size:12px;color:var(--accent);word-break:break-all;margin-bottom:14px;"></div>
+      <button class="btn btn-secondary btn-sm" onclick="disconnectFirebase()">🔌 Disconnect &amp; Reconfigure</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Danger Zone</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Wipe all scores from the database. Player list and events are kept. Cannot be undone.</div>
+      <button class="btn btn-danger btn-sm" onclick="resetScores()">🗑️ Reset All Scores</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════
+const DEFAULT_EVENTS = [
+  { id:'fall_guys',    name:'Fall Guys',          emoji:'🪂', format:'1 Episode — First to win',            order:0 },
+  { id:'golf_friends', name:'Golf With Friends',   emoji:'⛳', format:'Full course — Lowest score wins',     order:1 },
+  { id:'ufc',          name:'EA Sports UFC',        emoji:'🥊', format:'Round robin — 3-round fights',       order:2 },
+  { id:'ncaa',         name:'NCAA Football 26',     emoji:'🏈', format:'1 game — 4 min quarters',            order:3 },
+  { id:'fifa',         name:'EA Sports FC / FIFA',  emoji:'⚽', format:'1 game — 6 min halves',              order:4 },
+  { id:'battlefield',  name:'Battlefield',          emoji:'💣', format:'Team Deathmatch — 10 min',           order:5 },
+  { id:'nba2k',        name:'NBA 2K26',             emoji:'🏀', format:'1 game — 6 min quarters',            order:6 },
+  { id:'madden',       name:'Madden NFL 26',        emoji:'🏟️', format:'1 game — 4 min quarters',            order:7 },
+];
+const POINTS = {1:10, 2:6, 3:3, 4:1};
+const PEMOJIS = ['🎮','🕹️','👾','🎯','🔥','⚡','🌟','💫'];
+const ALL_EMOJIS = '🎮🕹️👾🏈⚽🏀🎯🥊🏒🎳🏎️🎱🤺🏹🪃🛹🪁🎲🃏🎰💣🔫🪂⛳🏋️🚀🐉🔥⚡🌟💫🎪🎠🎡🎢'.split('').filter((_,i,a) => {
+  // keep only meaningful emoji clusters
+  return true;
+});
+
+// ═══════════════════════════════════
+//  STATE
+// ═══════════════════════════════════
+let db = null;
+let state = { players:[], events:[], scores:{} };
+let editingId = null;
+let emojiPickerFor = null;
+let addFormOpen = false;
+let selEmoji = '🎮';
+let toastTimer = null;
+const EMOJI_LIST = ['🎮','🕹️','👾','🏈','⚽','🏀','🎯','🥊','🏒','🎳','🏎️','🎱','🤺','🏹','🪃','🛹','🎲','🃏','🎰','💣','🪂','⛳','🏋️','🚀','🐉','🔥','⚡','🌟','💫','🎪'];
+
+// ═══════════════════════════════════
+//  SETUP
+// ═══════════════════════════════════
+function toggleGuide(e) { e.preventDefault(); const g=document.getElementById('firebase-guide'); g.style.display=g.style.display==='none'?'block':'none'; }
+
+function connectFirebase() {
+  const url = document.getElementById('db-url').value.trim();
+  const err = document.getElementById('setup-error');
+  err.textContent = '';
+  if (!url || !url.startsWith('https://') || !url.includes('firebaseio')) {
+    err.textContent = 'Please enter a valid Firebase Realtime Database URL.';
+    return;
+  }
+  const btn = document.getElementById('connect-btn');
+  btn.disabled = true; btn.textContent = 'Connecting...';
+  document.getElementById('step2').classList.add('done');
+  try {
+    try { firebase.app(); } catch(e) { firebase.initializeApp({ databaseURL: url }); }
+    db = firebase.database();
+    db.ref('.info/connected').get().then(() => {
+      localStorage.setItem('borchlympics_db', url);
+      document.getElementById('step3').classList.add('done');
+      launchApp(url);
+    }).catch(() => {
+      btn.disabled=false; btn.textContent='⚡ Connect & Launch';
+      err.textContent = 'Could not reach database. Check URL and ensure test mode is enabled.';
+    });
+  } catch(e) {
+    btn.disabled=false; btn.textContent='⚡ Connect & Launch';
+    err.textContent = 'Error: ' + e.message;
+  }
+}
+
+function launchApp(url) {
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('main-app').style.display='block';
+  document.getElementById('cur-db-url').textContent = url;
+  buildEmojiPicker();
+  subscribeAll();
+}
+
+function disconnectFirebase() {
+  if (!confirm('Disconnect? You will need to re-enter your Firebase URL.')) return;
+  localStorage.removeItem('borchlympics_db');
+  location.reload();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('borchlympics_db');
+  if (saved) {
+    document.getElementById('db-url').value = saved;
+    try {
+      try { firebase.app(); } catch(e) { firebase.initializeApp({ databaseURL: saved }); }
+      db = firebase.database();
+      ['step1','step2','step3'].forEach(s => document.getElementById(s).classList.add('done'));
+      launchApp(saved);
+    } catch(e) { localStorage.removeItem('borchlympics_db'); }
+  }
+});
+
+function buildEmojiPicker() {
+  const picker = document.getElementById('add-emoji-picker');
+  picker.innerHTML = '';
+  EMOJI_LIST.forEach(em => {
+    const s = document.createElement('span');
+    s.className = 'emoji-opt'; s.textContent = em;
+    s.onclick = () => { selEmoji = em; document.getElementById('sel-emoji').textContent = em; };
+    picker.appendChild(s);
+  });
+}
+
+// ═══════════════════════════════════
+//  FIREBASE SUBSCRIPTIONS
+// ═══════════════════════════════════
+function subscribeAll() {
+  // Players
+  db.ref('players').on('value', snap => {
+    const val = snap.val();
+    state.players = val ? Object.values(val) : [];
+    if (!state.players.length) {
+      [{ id:'p1',name:'Player 1',emoji:'🎮' },{ id:'p2',name:'Player 2',emoji:'🕹️' },{ id:'p3',name:'Player 3',emoji:'👾' }]
+        .forEach(p => db.ref('players/'+p.id).set(p));
+    }
+    render();
+  });
+  // Events
+  db.ref('events').on('value', snap => {
+    const val = snap.val();
+    if (val) {
+      state.events = Object.values(val).sort((a,b) => (a.order??99)-(b.order??99));
+    } else {
+      DEFAULT_EVENTS.forEach(ev => db.ref('events/'+ev.id).set(ev));
+    }
+    render();
+  });
+  // Scores
+  db.ref('scores').on('value', snap => {
+    state.scores = snap.val() || {};
+    render();
+    flashSync();
+  });
+}
+
+function flashSync() {
+  const bar = document.getElementById('sync-bar');
+  bar.classList.remove('fade'); bar.classList.add('active');
+  setTimeout(() => { bar.classList.add('fade'); setTimeout(() => bar.classList.remove('active','fade'), 500); }, 700);
+}
+
+// ═══════════════════════════════════
+//  COMPUTED
+// ═══════════════════════════════════
+function ranked() {
+  return state.players.map(p => {
+    let pts=0,wins=0,seconds=0,played=0;
+    state.events.forEach(ev => {
+      const r = (state.scores[ev.id]||{})[p.id];
+      if (r) { pts+=POINTS[r]||1; played++; if(r===1)wins++; if(r===2)seconds++; }
+    });
+    return {...p,pts,wins,seconds,played};
+  }).sort((a,b) => b.pts-a.pts||b.wins-a.wins||b.seconds-a.seconds);
+}
+
+// ═══════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════
+function render() {
+  if (document.getElementById('main-app').style.display==='none') return;
+  renderStandings(); renderEvents(); renderScores(); renderPlayers();
+  // Update rules max score
+  const n = state.events.length;
+  const el1 = document.getElementById('rules-event-count');
+  const el2 = document.getElementById('rules-max-score');
+  if(el1) el1.textContent = n;
+  if(el2) el2.textContent = n*10;
+}
+
+function renderStandings() {
+  const r = ranked();
+  const total = state.events.length;
+  const done = state.events.filter(ev => state.players.some(p => (state.scores[ev.id]||{})[p.id])).length;
+
+  // Podium (2nd, 1st, 3rd order visually)
+  const order = [r[1],r[0],r[2]].filter(Boolean);
+  const cls = ['p2','p1','p3'], medals = ['🥈','🥇','🥉'];
+  document.getElementById('podium-area').innerHTML = '<div class="standings-podium">' +
+    order.map((p,i) => `<div class="podium-slot ${cls[i]}">
+      <div class="podium-avatar">${p.emoji}</div>
+      <div class="podium-name">${p.name}</div>
+      <div class="podium-pts">${p.pts} pts</div>
+      <div class="podium-block">${medals[i]}</div></div>`).join('') + '</div>';
+
+  const rC = ['r1','r2','r3'];
+  document.getElementById('standings-body').innerHTML = r.map((p,i) =>
+    `<tr><td><span class="rbadge ${rC[i]||'rX'}">${i+1}</span></td>
+    <td><strong>${p.name}</strong> ${p.emoji}</td>
+    <td><strong>${p.pts}</strong></td><td>${p.wins}</td><td>${p.played}/${total}</td></tr>`).join('');
+
+  document.getElementById('progress-info').textContent = `${done} of ${total} events completed`;
+  document.getElementById('progress-bar').style.width = total ? (done/total*100)+'%' : '0%';
+}
+
+function renderEvents() {
+  const list = document.getElementById('events-list');
+  list.innerHTML = '';
+  state.events.forEach((ev, i) => {
+    const isDone = state.players.some(p => (state.scores[ev.id]||{})[p.id]);
+    const isEditing = editingId === ev.id;
+    const isPickingEmoji = emojiPickerFor === ev.id;
+    const div = document.createElement('div');
+    div.className = 'event-card' + (isEditing ? ' editing' : '');
+
+    let inner = `<div class="event-top">
+      <div class="ev-num">${i+1}</div>
+      <div class="ev-emoji" onclick="toggleEmojiPicker('${ev.id}')" title="Change emoji">${ev.emoji}</div>
+      <div class="ev-details">`;
+
+    if (isEditing) {
+      inner += `<div class="ev-edit-area">
+        <div class="ev-edit-row">
+          <input id="en-${ev.id}" value="${escHtml(ev.name)}" placeholder="Game name" />
+          <input id="ef-${ev.id}" value="${escHtml(ev.format||'')}" placeholder="Format / rules" />
+        </div>
+        <div class="btn-row" style="margin-top:6px;margin-bottom:0;">
+          <button class="btn btn-primary btn-sm" onclick="saveEdit('${ev.id}')">Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancel</button>
+        </div></div>`;
+    } else {
+      inner += `<div class="ev-name"><span class="dot ${isDone?'dot-green':'dot-muted'}"></span>${escHtml(ev.name)}</div>
+        <div class="ev-format">${escHtml(ev.format||'')}</div>`;
+    }
+
+    inner += `</div>`;
+    if (!isEditing) {
+      inner += `<div class="ev-actions">
+        <button class="icon-btn" onclick="startEdit('${ev.id}')" title="Edit">✏️</button>
+        <button class="icon-btn" onclick="moveEv('${ev.id}',-1)" ${i===0?'disabled':''} title="Move up">▲</button>
+        <button class="icon-btn" onclick="moveEv('${ev.id}',1)" ${i===state.events.length-1?'disabled':''} title="Move down">▼</button>
+        <button class="icon-btn del" onclick="removeEv('${ev.id}')" title="Remove">✕</button>
+      </div>`;
+    }
+    inner += `</div>`;
+
+    if (isPickingEmoji) {
+      inner += `<div class="emoji-picker" style="margin-top:10px;">` +
+        EMOJI_LIST.map(em => `<span class="emoji-opt" onclick="setEvEmoji('${ev.id}','${em}')">${em}</span>`).join('') +
+        `</div>`;
+    }
+
+    div.innerHTML = inner;
+    list.appendChild(div);
+  });
+}
+
+function renderScores() {
+  const c = document.getElementById('score-inputs');
+  c.innerHTML = '';
+  state.events.forEach(ev => {
+    const sc = state.scores[ev.id]||{};
+    const div = document.createElement('div');
+    div.className = 'score-row';
+    const opts = state.players.length > 3 ? ['','1','2','3','4'] : ['','1','2','3'];
+    const labels = {'':'—','1':'🥇 1st','2':'🥈 2nd','3':'🥉 3rd','4':'4th+'};
+    div.innerHTML = `<div class="score-info"><div class="score-name">${ev.emoji} ${escHtml(ev.name)}</div><div class="score-meta">${escHtml(ev.format||'')}</div></div>
+    <div class="player-scores">${state.players.map(p =>
+      `<div class="psi"><label>${escHtml(p.name)}</label>
+      <select onchange="setScore('${ev.id}','${p.id}',this.value)">
+        ${opts.map(o=>`<option value="${o}" ${(sc[p.id]||'')==o&&o!==''?'selected':''}>${labels[o]}</option>`).join('')}
+      </select></div>`).join('')}</div>`;
+    c.appendChild(div);
+  });
+}
+
+function renderPlayers() {
+  const r = ranked();
+  document.getElementById('players-list').innerHTML = r.map(p =>
+    `<div class="player-item">
+      <div class="player-avatar">${p.emoji}</div>
+      <div><div class="player-name">${escHtml(p.name)}</div><div class="player-sub">${p.pts} pts · ${p.wins} wins</div></div>
+      <div class="ml-auto"><button class="btn btn-danger btn-sm" onclick="removePlayer('${p.id}')">Remove</button></div>
+    </div>`).join('') || '<div style="color:var(--muted);font-size:13px;">No players yet.</div>';
+}
+
+// ═══════════════════════════════════
+//  ACTIONS
+// ═══════════════════════════════════
+// Scores
+function setScore(evId, pId, val) {
+  const ref = db.ref(`scores/${evId}/${pId}`);
+  val ? ref.set(parseInt(val)) : ref.remove();
+}
+
+// Events
+function toggleAddForm() {
+  addFormOpen = !addFormOpen;
+  document.getElementById('add-event-box').style.display = addFormOpen ? 'block' : 'none';
+}
+
+function addEvent() {
+  const name = document.getElementById('new-ev-name').value.trim();
+  const fmt  = document.getElementById('new-ev-fmt').value.trim();
+  if (!name) { showToast('Enter a game name!'); return; }
+  const id = 'ev_'+Date.now();
+  db.ref('events/'+id).set({ id, name, format:fmt, emoji:selEmoji, order:state.events.length });
+  document.getElementById('new-ev-name').value='';
+  document.getElementById('new-ev-fmt').value='';
+  toggleAddForm();
+  showToast(selEmoji+' '+name+' added!');
+}
+
+function startEdit(id) { editingId=id; emojiPickerFor=null; renderEvents(); }
+function cancelEdit() { editingId=null; renderEvents(); }
+
+function saveEdit(id) {
+  const name = document.getElementById('en-'+id)?.value.trim();
+  const fmt  = document.getElementById('ef-'+id)?.value.trim();
+  if (!name) { showToast('Name required!'); return; }
+  db.ref('events/'+id).update({ name, format:fmt });
+  editingId=null;
+  showToast('Event updated!');
+}
+
+function toggleEmojiPicker(id) {
+  emojiPickerFor = emojiPickerFor===id ? null : id;
+  renderEvents();
+}
+
+function setEvEmoji(id, em) {
+  db.ref('events/'+id+'/emoji').set(em);
+  emojiPickerFor=null;
+  renderEvents();
+}
+
+function moveEv(id, dir) {
+  const idx = state.events.findIndex(e=>e.id===id);
+  const newIdx = idx+dir;
+  if (newIdx<0||newIdx>=state.events.length) return;
+  const a=state.events[idx], b=state.events[newIdx];
+  db.ref('events/'+a.id+'/order').set(b.order??newIdx);
+  db.ref('events/'+b.id+'/order').set(a.order??idx);
+}
+
+function removeEv(id) {
+  if (!confirm('Remove this event? Its scores will also be deleted.')) return;
+  db.ref('events/'+id).remove();
+  db.ref('scores/'+id).remove();
+  showToast('Event removed.');
+}
+
+// Players
+function addPlayer() {
+  const input=document.getElementById('new-player-name');
+  const name=input.value.trim();
+  if (!name) { showToast('Enter a name!'); return; }
+  if (state.players.length>=8) { showToast('Max 8 players!'); return; }
+  if (state.players.find(p=>p.name.toLowerCase()===name.toLowerCase())) { showToast('Name already taken!'); return; }
+  const id='p'+Date.now();
+  db.ref('players/'+id).set({ id, name, emoji:PEMOJIS[state.players.length%PEMOJIS.length] });
+  input.value='';
+  showToast(name+' joined the Borchlympics!');
+}
+
+function removePlayer(id) {
+  if (state.players.length<=2) { showToast('Need at least 2 players!'); return; }
+  if (!confirm('Remove this player? Their scores will be deleted.')) return;
+  db.ref('players/'+id).remove();
+  state.events.forEach(ev=>db.ref('scores/'+ev.id+'/'+id).remove());
+  showToast('Player removed.');
+}
+
+// Settings
+function resetScores() {
+  if (!confirm('Reset ALL scores? This cannot be undone.')) return;
+  db.ref('scores').remove();
+  showToast('🔄 All scores reset!');
+}
+
+// ═══════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  const order=['standings','events','scoreboard','rules','players','settings'];
+  document.querySelectorAll('.tab')[order.indexOf(name)]?.classList.add('active');
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
