@@ -1,0 +1,535 @@
+import { useState, useEffect, useCallback } from 'react'
+import Head from 'next/head'
+
+const C = {
+  bg:      '#09090b',
+  surface: '#101014',
+  card:    '#17171d',
+  border:  '#1f1f2e',
+  accent:  '#c9a84c',
+  green:   '#4caf7d',
+  red:     '#e05252',
+  blue:    '#4a90d9',
+  text:    '#e8eaed',
+  muted:   '#8b949e',
+  subtle:  '#2a2a3a',
+}
+
+const TABS = ['Dashboard', 'Standings', 'Scores', 'Player Stats', 'Media Center', 'Drive Sync']
+
+function Badge({ children, color = C.accent }) {
+  return (
+    <span style={{
+      background: color + '22', color,
+      border: `1px solid ${color}44`,
+      borderRadius: 4, padding: '2px 8px',
+      fontSize: 11, fontFamily: "'Oswald', sans-serif",
+      letterSpacing: 1, textTransform: 'uppercase', whiteSpace: 'nowrap',
+    }}>{children}</span>
+  )
+}
+
+function Card({ children, style = {} }) {
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`,
+      borderRadius: 10, padding: 20, ...style,
+    }}>{children}</div>
+  )
+}
+
+function SectionTitle({ children, sub }) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: 1, textTransform: 'uppercase' }}>{children}</h2>
+      {sub && <p style={{ color: C.muted, margin: '4px 0 0', fontSize: 13 }}>{sub}</p>}
+    </div>
+  )
+}
+
+function PillBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      background: active ? C.accent : C.card,
+      color: active ? '#000' : C.muted,
+      border: `1px solid ${active ? C.accent : C.border}`,
+      borderRadius: 6, padding: '8px 18px', cursor: 'pointer',
+      fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
+      transition: 'all 0.15s',
+    }}>{children}</button>
+  )
+}
+
+// ── Dashboard ──────────────────────────────────────────────────
+function Dashboard({ teams, games, players, scanLog }) {
+  const finalGames  = games.filter(g => g.status === 'Final')
+  const recentGames = [...finalGames].reverse().slice(0, 3)
+  const topTeam     = teams[0]
+  const weeks       = games.length ? Math.max(...games.map(g => g.week)) : 0
+  const topPasser   = players.find(p => p.pos === 'QB')
+  const topRusher   = players.find(p => p.pos === 'RB')
+  const topReceiver = players.find(p => p.pos === 'WR')
+
+  return (
+    <div>
+      <SectionTitle sub={`Live Season Overview · ${teams.length} Teams`}>Dynasty Universe</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+        {[
+          { label: 'Current Week', value: `Wk ${weeks || '—'}`, icon: '📅' },
+          { label: '#1 Ranked',    value: topTeam?.name || '—', icon: '🏆' },
+          { label: 'Teams',        value: teams.length || '—',  icon: '🏟️' },
+          { label: 'Games Played', value: finalGames.length,    icon: '🏈' },
+        ].map(s => (
+          <Card key={s.label} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 26, color: C.accent, fontWeight: 700 }}>{s.value}</div>
+            <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginTop: 6 }}>{s.label}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <Card>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 }}>Power Rankings</div>
+          {teams.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>No data yet — sync screenshots from Drive.</div>}
+          {teams.slice(0, 5).map((t, i) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < 4 ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: i === 0 ? C.accent : C.muted, width: 28, textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.text, fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                <div style={{ color: C.muted, fontSize: 12 }}>{t.coach}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", color: C.text, fontSize: 14 }}>{t.wins}-{t.losses}</div>
+                <Badge color={t.streak?.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+              </div>
+            </div>
+          ))}
+        </Card>
+
+        <Card>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 }}>Recent Results</div>
+          {recentGames.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>No results yet.</div>}
+          {recentGames.map(g => (
+            <div key={g.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: g.home_score > g.away_score ? C.text : C.muted, fontWeight: g.home_score > g.away_score ? 700 : 400, fontSize: 14 }}>{g.home_team}</span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.accent }}>{g.home_score}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                <span style={{ color: g.away_score > g.home_score ? C.text : C.muted, fontWeight: g.away_score > g.home_score ? 700 : 400, fontSize: 14 }}>{g.away_team}</span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.accent }}>{g.away_score}</span>
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>Week {g.week}</div>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 }}>Stat Leaders</div>
+        {players.length === 0
+          ? <div style={{ color: C.muted, fontSize: 13 }}>No player data yet.</div>
+          : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20 }}>
+              {[
+                { label: 'Passing Yards',   player: topPasser,   stat: topPasser?.stats?.pass_yds },
+                { label: 'Rushing Yards',   player: topRusher,   stat: topRusher?.stats?.rush_yds },
+                { label: 'Receiving Yards', player: topReceiver, stat: topReceiver?.stats?.rec_yds },
+              ].filter(x => x.player).map(x => (
+                <div key={x.label}>
+                  <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{x.label}</div>
+                  <div style={{ color: C.text, fontWeight: 700 }}>{x.player.name}</div>
+                  <div style={{ color: C.muted, fontSize: 12 }}>{x.player.team}</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 32, color: C.accent }}>{x.stat?.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
+      </Card>
+
+      {scanLog?.length > 0 && (
+        <Card>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Recent Syncs</div>
+          {scanLog.slice(0, 5).map((log, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: i < 4 ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ color: C.text }}>{log.file_name}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Badge color={C.blue}>{log.data_type}</Badge>
+                <span style={{ color: C.green }}>{log.records_parsed} records</span>
+                <span style={{ color: C.muted, fontSize: 11 }}>{new Date(log.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Standings ──────────────────────────────────────────────────
+function Standings({ teams }) {
+  const sorted = [...teams].sort((a, b) => (a.rank || 99) - (b.rank || 99) || b.wins - a.wins)
+  return (
+    <div>
+      <SectionTitle sub="Current Season Records">Standings</SectionTitle>
+      {teams.length === 0
+        ? <Card><p style={{ color: C.muted }}>No standings data yet.</p></Card>
+        : (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: C.surface }}>
+                    {['#','Team','Coach','W','L','PF','PA','Diff','Streak'].map(h => (
+                      <th key={h} style={{ padding: '13px 16px', textAlign: ['Team','Coach'].includes(h) ? 'left' : 'center', color: C.muted, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((t, i) => (
+                    <tr key={t.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
+                      <td style={{ padding: '13px 16px', textAlign: 'center' }}><span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: i < 4 ? C.accent : C.muted }}>{i + 1}</span></td>
+                      <td style={{ padding: '13px 16px' }}><span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{t.name}</span></td>
+                      <td style={{ padding: '13px 16px', color: C.muted, fontSize: 13 }}>{t.coach}</td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center', color: C.green, fontFamily: "'Oswald', sans-serif", fontSize: 17 }}>{t.wins}</td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center', color: C.red, fontFamily: "'Oswald', sans-serif", fontSize: 17 }}>{t.losses}</td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center', color: C.text, fontSize: 13 }}>{t.pts}</td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center', color: C.muted, fontSize: 13 }}>{t.pts_against}</td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center', fontSize: 13 }}><span style={{ color: (t.pts - t.pts_against) >= 0 ? C.green : C.red }}>{(t.pts - t.pts_against) >= 0 ? '+' : ''}{t.pts - t.pts_against}</span></td>
+                      <td style={{ padding: '13px 16px', textAlign: 'center' }}><Badge color={t.streak?.startsWith('W') ? C.green : C.red}>{t.streak}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+    </div>
+  )
+}
+
+// ── Scores ─────────────────────────────────────────────────────
+function Scores({ games }) {
+  const weeks = [...new Set(games.map(g => g.week))].sort((a, b) => b - a)
+  const [week, setWeek] = useState(weeks[0] || 1)
+  useEffect(() => { if (weeks.length) setWeek(weeks[0]) }, [games.length])
+  const filtered = games.filter(g => g.week === week)
+
+  return (
+    <div>
+      <SectionTitle sub="Game Results & Schedule">Scores & Schedule</SectionTitle>
+      {games.length === 0
+        ? <Card><p style={{ color: C.muted }}>No game data yet.</p></Card>
+        : (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+              {weeks.map(w => <PillBtn key={w} active={week === w} onClick={() => setWeek(w)}>Week {w}</PillBtn>)}
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {filtered.map(g => (
+                <Card key={g.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <Badge color={g.status === 'Final' ? C.muted : C.blue}>{g.status}</Badge>
+                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: g.home_score > g.away_score ? C.text : C.muted, fontWeight: 700, fontSize: 18 }}>{g.home_team}</div>
+                        <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Home</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        {g.status === 'Final'
+                          ? <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 32, color: C.accent, letterSpacing: 2 }}>{g.home_score} – {g.away_score}</div>
+                          : <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.muted }}>vs</div>}
+                      </div>
+                      <div>
+                        <div style={{ color: g.away_score > g.home_score ? C.text : C.muted, fontWeight: 700, fontSize: 18 }}>{g.away_team}</div>
+                        <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Away</div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+    </div>
+  )
+}
+
+// ── Player Stats ───────────────────────────────────────────────
+function PlayerStats({ players }) {
+  const positions = ['ALL', ...new Set(players.map(p => p.pos))]
+  const [pos, setPos] = useState('ALL')
+  const filtered = pos === 'ALL' ? players : players.filter(p => p.pos === pos)
+  const STAT_COLS = { QB: ['pass_yds','pass_td','int','rush_yds'], RB: ['rush_yds','rush_td','rec','rec_yds'], WR: ['rec','rec_yds','rec_td','yac'] }
+
+  return (
+    <div>
+      <SectionTitle sub="Individual Season Statistics">Player Stats</SectionTitle>
+      {players.length === 0
+        ? <Card><p style={{ color: C.muted }}>No player data yet.</p></Card>
+        : (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+              {positions.map(p => <PillBtn key={p} active={pos === p} onClick={() => setPos(p)}>{p}</PillBtn>)}
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {filtered.map(p => {
+                const cols = STAT_COLS[p.pos] || Object.keys(p.stats || {}).slice(0, 4)
+                return (
+                  <Card key={p.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 150 }}>
+                        <Badge color={p.pos === 'QB' ? C.blue : p.pos === 'RB' ? C.green : C.accent}>{p.pos}</Badge>
+                        <div style={{ color: C.text, fontWeight: 700, fontSize: 17, marginTop: 6 }}>{p.name}</div>
+                        <div style={{ color: C.muted, fontSize: 12 }}>{p.team}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                        {cols.map(col => p.stats?.[col] !== undefined && (
+                          <div key={col} style={{ textAlign: 'center' }}>
+                            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 26, color: C.accent }}>{Number(p.stats[col]).toLocaleString()}</div>
+                            <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>{col.replace(/_/g, ' ')}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          </>
+        )}
+    </div>
+  )
+}
+
+// ── Media Center ───────────────────────────────────────────────
+function MediaCenter({ teams, games, players }) {
+  const [type, setType]       = useState('power_rankings')
+  const [loading, setLoading] = useState(false)
+  const [article, setArticle] = useState(null)
+
+  const TYPES = [
+    { id: 'power_rankings',    label: 'Power Rankings',    icon: '📊' },
+    { id: 'weekly_recap',      label: 'Weekly Recap',      icon: '📰' },
+    { id: 'player_spotlight',  label: 'Player Spotlight',  icon: '⭐' },
+    { id: 'rivalry_breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
+  ]
+
+  const generate = async () => {
+    setLoading(true); setArticle(null)
+    try {
+      const res = await fetch('/api/generate-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleType: type, teams, scores: games, players }),
+      })
+      const data = await res.json()
+      setArticle(data.article || data.error)
+    } catch (e) { setArticle('Error generating article.') }
+    setLoading(false)
+  }
+
+  return (
+    <div>
+      <SectionTitle sub="AI-Powered ESPN-Style Coverage">Media Center</SectionTitle>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        {TYPES.map(t => <PillBtn key={t.id} active={type === t.id} onClick={() => setType(t.id)}>{t.icon} {t.label}</PillBtn>)}
+      </div>
+      <button onClick={generate} disabled={loading} style={{
+        background: loading ? C.subtle : C.accent, color: loading ? C.muted : '#000',
+        border: 'none', borderRadius: 8, padding: '14px 32px',
+        cursor: loading ? 'not-allowed' : 'pointer',
+        fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1,
+        textTransform: 'uppercase', marginBottom: 24,
+      }}>{loading ? '⏳ Generating...' : '⚡ Generate Article'}</button>
+
+      {article && (
+        <Card>
+          {article.split('\n').map((line, i) => {
+            if (!line.trim()) return <div key={i} style={{ height: 8 }} />
+            const clean = line.replace(/^#+\s*/, '')
+            const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
+            return isHead
+              ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? 26 : 16, color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 14, marginTop: i > 0 ? 20 : 0 }}>{clean}</div>
+              : <p key={i} style={{ color: C.text, fontSize: 15, margin: '0 0 12px', lineHeight: 1.8 }}>{line}</p>
+          })}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Drive Sync ─────────────────────────────────────────────────
+function DriveSync({ onRefresh }) {
+  const [files, setFiles]     = useState([])
+  const [loading, setLoading] = useState(false)
+  const [parsing, setParsing] = useState(null)
+  const [dataType, setDataType] = useState('standings')
+  const [results, setResults] = useState({})
+
+  const DATA_TYPES = [
+    { id: 'standings',    label: 'Standings / Records' },
+    { id: 'scores',       label: 'Scores & Schedule' },
+    { id: 'player_stats', label: 'Player Stats' },
+  ]
+
+  const loadFiles = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/drive-files')
+      const data = await res.json()
+      setFiles(data.files || [])
+    } catch (e) { console.error(e) }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { loadFiles() }, [loadFiles])
+
+  const parse = async (file) => {
+    setParsing(file.id)
+    try {
+      const res = await fetch('/api/parse-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: file.id, mimeType: file.mimeType, dataType, fileName: file.name }),
+      })
+      const data = await res.json()
+      setResults(r => ({ ...r, [file.id]: data }))
+      if (data.success) onRefresh()
+    } catch (e) {
+      setResults(r => ({ ...r, [file.id]: { error: e.message } }))
+    }
+    setParsing(null)
+  }
+
+  return (
+    <div>
+      <SectionTitle sub="Pull screenshots from your shared Google Drive folder">Drive Sync</SectionTitle>
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>What type of screenshot are you scanning?</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {DATA_TYPES.map(t => <PillBtn key={t.id} active={dataType === t.id} onClick={() => setDataType(t.id)}>{t.label}</PillBtn>)}
+        </div>
+      </Card>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ color: C.muted, fontSize: 14 }}>{files.length} screenshot{files.length !== 1 ? 's' : ''} found</div>
+        <button onClick={loadFiles} disabled={loading} style={{ background: C.card, color: loading ? C.muted : C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>
+          {loading ? '⏳ Loading...' : '🔄 Refresh'}
+        </button>
+      </div>
+
+      {files.length === 0 && !loading && (
+        <Card><p style={{ color: C.muted, margin: 0 }}>No images found. Make sure the shared Drive folder has screenshots uploaded and the service account has Viewer access.</p></Card>
+      )}
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {files.map(file => {
+          const result   = results[file.id]
+          const isParsing = parsing === file.id
+          return (
+            <Card key={file.id} style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 32 }}>🖼️</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Uploaded {new Date(file.createdTime).toLocaleString()}</div>
+                {result?.success && <div style={{ color: C.green, fontSize: 12, marginTop: 4 }}>✅ Parsed {Object.values(result.data)[0]?.length || 0} records — dynasty updated</div>}
+                {result?.error  && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}</div>}
+              </div>
+              <button onClick={() => parse(file)} disabled={isParsing || result?.success} style={{
+                background: result?.success ? C.green + '22' : isParsing ? C.subtle : C.accent,
+                color: result?.success ? C.green : isParsing ? C.muted : '#000',
+                border: `1px solid ${result?.success ? C.green : C.accent}`,
+                borderRadius: 6, padding: '10px 20px',
+                cursor: result?.success || isParsing ? 'default' : 'pointer',
+                fontFamily: "'Oswald', sans-serif", fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
+                {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan with AI'}
+              </button>
+            </Card>
+          )
+        })}
+      </div>
+
+      <Card style={{ marginTop: 24, borderColor: C.accent + '33' }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>How to add screenshots</div>
+        <ol style={{ color: C.muted, fontSize: 13, lineHeight: 2, margin: 0, paddingLeft: 20 }}>
+          <li>Open the shared Google Drive folder link (pinned in your league chat)</li>
+          <li>Upload any screenshot from EA CFB 26 — standings, scoreboard, or stat screen</li>
+          <li>Come back here, hit <strong style={{ color: C.text }}>Refresh</strong>, then <strong style={{ color: C.text }}>Scan with AI</strong></li>
+          <li>The dynasty updates automatically across all tabs</li>
+        </ol>
+      </Card>
+    </div>
+  )
+}
+
+// ── Root App ───────────────────────────────────────────────────
+export default function App() {
+  const [tab, setTab]         = useState('Dashboard')
+  const [data, setData]       = useState({ teams: [], games: [], players: [], scanLog: [] })
+  const [loadingData, setLoadingData] = useState(true)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/league-data')
+      const json = await res.json()
+      setData(json)
+    } catch (e) { console.error(e) }
+    setLoadingData(false)
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  return (
+    <>
+      <Head>
+        <title>Dynasty Universe · CFB 26</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet" />
+      </Head>
+      <style>{`* { box-sizing:border-box; } body { margin:0; background:${C.bg}; font-family:'Lato',sans-serif; color:${C.text}; } ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:${C.surface};} ::-webkit-scrollbar-thumb{background:${C.subtle};border-radius:3px;}`}</style>
+
+      {/* Nav */}
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center' }}>
+          <div style={{ padding: '16px 24px 16px 0', borderRight: `1px solid ${C.border}`, marginRight: 24, flexShrink: 0 }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 21, fontWeight: 700, letterSpacing: 2, color: C.accent, lineHeight: 1 }}>DYNASTY</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 5, color: C.muted }}>UNIVERSE</div>
+          </div>
+          <div style={{ display: 'flex', gap: 2, flex: 1, overflowX: 'auto' }}>
+            {TABS.map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                background: 'transparent', color: tab === t ? C.accent : C.muted,
+                border: 'none', borderBottom: `2px solid ${tab === t ? C.accent : 'transparent'}`,
+                padding: '20px 14px', cursor: 'pointer',
+                fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.8,
+                textTransform: 'uppercase', transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+              }}>{t}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, paddingLeft: 16, flexShrink: 0 }}>
+            <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
+            <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '36px 24px' }}>
+        {loadingData
+          ? <div style={{ color: C.muted, textAlign: 'center', paddingTop: 80, fontFamily: "'Oswald', sans-serif", letterSpacing: 2 }}>LOADING DYNASTY DATA...</div>
+          : (
+            <>
+              {tab === 'Dashboard'    && <Dashboard   {...data} />}
+              {tab === 'Standings'    && <Standings   teams={data.teams} />}
+              {tab === 'Scores'       && <Scores      games={data.games} />}
+              {tab === 'Player Stats' && <PlayerStats players={data.players} />}
+              {tab === 'Media Center' && <MediaCenter teams={data.teams} games={data.games} players={data.players} />}
+              {tab === 'Drive Sync'   && <DriveSync   onRefresh={fetchData} />}
+            </>
+          )}
+      </div>
+    </>
+  )
+}
