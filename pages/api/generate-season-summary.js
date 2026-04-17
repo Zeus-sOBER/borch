@@ -73,15 +73,15 @@ export default async function handler(req, res) {
     // ── Pull final standings ──────────────────────────────────────────────
     const { data: standings } = await supabase
       .from('teams')
-      .select('team_name, wins, losses')
+      .select('name, wins, losses')
       .order('wins', { ascending: false });
 
     const humanTeams = (coaches || []).map(c => c.team?.toLowerCase()).filter(Boolean);
     const finalStandings = (standings || [])
-      .filter(t => humanTeams.includes(t.team_name?.toLowerCase()))
+      .filter(t => humanTeams.includes(t.name?.toLowerCase()))
       .map((t, i) => {
-        const coach = coaches?.find(c => c.team?.toLowerCase() === t.team_name?.toLowerCase());
-        return `#${i + 1} ${t.team_name} (${t.wins}-${t.losses})${coach ? ` — ${coach.name}` : ''}`;
+        const coach = coaches?.find(c => c.team?.toLowerCase() === t.name?.toLowerCase());
+        return `#${i + 1} ${t.name} (${t.wins}-${t.losses})${coach ? ` — ${coach.name}` : ''}`;
       }).join('\n');
 
     // ── Pull championship record ──────────────────────────────────────────

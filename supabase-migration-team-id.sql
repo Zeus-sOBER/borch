@@ -16,7 +16,7 @@ UPDATE coaches c
 SET team_id = t.id
 FROM teams t
 WHERE c.team_id IS NULL
-  AND lower(trim(c.team)) = lower(trim(COALESCE(t.team_name, t.name)));
+  AND lower(trim(c.team)) = lower(trim(t.name));
 
 -- Done! team_id is now the authoritative link.
 -- String-based team name is kept as a display fallback for coaches not yet linked.

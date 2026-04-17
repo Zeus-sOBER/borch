@@ -314,15 +314,20 @@ async function saveToSupabase(data, coaches, humanTeams) {
       const { error } = await supabase.from('players').upsert({
         name: player.name,
         team: player.team ?? null,
-        position: player.position ?? null,
+        pos: player.position ?? null,  // correct column: pos (not position)
+        season: data.season ?? 1,
         yards: player.yards ?? 0,
         touchdowns: player.touchdowns ?? 0,
-        completions: player.completions ?? null,
-        attempts: player.attempts ?? null,
-        interceptions: player.interceptions ?? null,
-        carries: player.carries ?? null,
-        receptions: player.receptions ?? null
-      }, { onConflict: 'name,team' });
+        stats: {
+          pass_yds: player.yards ?? 0,
+          pass_td: player.touchdowns ?? 0,
+          int: player.interceptions ?? 0,
+          completions: player.completions ?? 0,
+          attempts: player.attempts ?? 0,
+          rush_yds: 0,
+          rec_yds: 0,
+        },
+      }, { onConflict: 'name,season' }); // matches unique (name, season) constraint
       if (!error) saved.players++;
     }
   }
@@ -332,12 +337,13 @@ async function saveToSupabase(data, coaches, humanTeams) {
     for (const team of data.standings) {
       if (!team.team_name) continue;
       const { error } = await supabase.from('teams').upsert({
-        team_name: team.team_name,
+        name: team.team_name,          // correct column: name (not team_name)
+        season: data.season ?? 1,
         wins: team.wins ?? 0,
         losses: team.losses ?? 0,
         conference_wins: team.conference_wins ?? null,
         conference_losses: team.conference_losses ?? null
-      }, { onConflict: 'team_name' });
+      }, { onConflict: 'name,season' }); // matches unique (name, season) constraint
       if (!error) saved.standings++;
     }
 
@@ -346,7 +352,7 @@ async function saveToSupabase(data, coaches, humanTeams) {
       // Fetch saved team IDs so we can match by id first
       const { data: savedTeams } = await supabase
         .from('teams')
-        .select('id, team_name, name');
+        .select('id, name');
 
       for (const team of data.standings) {
         if (!team.team_name) continue;
@@ -354,7 +360,7 @@ async function saveToSupabase(data, coaches, humanTeams) {
 
         // Find the DB team row for this standing
         const dbTeam = (savedTeams || []).find(
-          t => (t.team_name || t.name || '').toLowerCase().trim() === teamKey
+          t => (t.name || '').toLowerCase().trim() === teamKey
         );
 
         // Match coach: prefer team_id link, fall back to name string
@@ -418,7 +424,7 @@ async function logParsedResultToNarrative(data, coaches, humanTeams) {
     // Pull standings to help detect upsets
     const { createClient: sc } = await import('@supabase/supabase-js');
     const db = sc(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { data: standings } = await db.from('teams').select('team_name, wins, losses').order('wins', { ascending: false });
+    const { data: standings } = await db.from('teams').select('name, wins, losses').order('wins', { ascending: false });
 
     // Log each final game result
     if (data.games?.length > 0) {

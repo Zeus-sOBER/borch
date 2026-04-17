@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       .from('teams').select('*').order('wins', { ascending: false });
 
     const teams = (allTeams || []).filter(t =>
-      humanTeams.some(ht => ht.toLowerCase() === t.team_name?.toLowerCase())
+      humanTeams.some(ht => ht.toLowerCase() === (t.name || t.team_name || '').toLowerCase())
     );
 
     // ── Games (human teams, separated by type) ───────────────────────────
@@ -138,7 +138,7 @@ export default async function handler(req, res) {
 
     // ── Build rich coach profiles ────────────────────────────────────────
     const coachProfiles = coaches.map(c => {
-      const teamRecord = teams.find(t => t.team_name?.toLowerCase() === c.team?.toLowerCase());
+      const teamRecord = teams.find(t => (t.name || t.team_name || '').toLowerCase() === c.team?.toLowerCase());
       const record = teamRecord
         ? `${teamRecord.wins}-${teamRecord.losses}`
         : (c.record || 'record unknown');
@@ -180,12 +180,13 @@ export default async function handler(req, res) {
     // ── Standings summary with championship badges ────────────────────────
     const standingsSummary = teams.length > 0
       ? teams.map((t, i) => {
-          const coach = coaches.find(c => c.team?.toLowerCase() === t.team_name?.toLowerCase());
+          const tName = t.name || t.team_name || ''
+          const coach = coaches.find(c => c.team?.toLowerCase() === tName.toLowerCase());
           const champs = (championships || []).filter(
-            ch => ch.team_name?.toLowerCase() === t.team_name?.toLowerCase()
+            ch => ch.team_name?.toLowerCase() === tName.toLowerCase()
           );
           const champBadge = champs.length > 0 ? ` 🏆x${champs.length}` : '';
-          return `#${i + 1} ${t.team_name} (${t.wins}-${t.losses})${champBadge}${coach ? ` — Coach: ${coach.name}` : ''}`;
+          return `#${i + 1} ${tName} (${t.wins}-${t.losses})${champBadge}${coach ? ` — Coach: ${coach.name}` : ''}`;
         }).join('\n')
       : 'No standings data yet.';
 

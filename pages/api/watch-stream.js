@@ -176,7 +176,7 @@ async function logStreamToNarrative(analysis, channelName, gameContext, season, 
   try {
     // Pull coaches to do coach lookups
     const { data: coaches } = await db.from('coaches').select('name, team');
-    const { data: standings } = await db.from('teams').select('team_name, wins, losses').order('wins', { ascending: false });
+    const { data: standings } = await db.from('teams').select('name, wins, losses').order('wins', { ascending: false });
 
     const homeTeam = analysis.game?.homeTeam;
     const awayTeam = analysis.game?.awayTeam;
