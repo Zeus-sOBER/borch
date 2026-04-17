@@ -304,16 +304,18 @@ function PlayerStats({ players }) {
 }
 
 // ── Media Center ───────────────────────────────────────────────
-function MediaCenter({ teams, games, players }) {
+function MediaCenter({ teams, games, players, commPin, onPinSet }) {
   const [type, setType]       = useState('power_rankings')
   const [loading, setLoading] = useState(false)
   const [article, setArticle] = useState(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState(false)
 
   const TYPES = [
-    { id: 'power_rankings',    label: 'Power Rankings',    icon: '📊' },
-    { id: 'weekly_recap',      label: 'Weekly Recap',      icon: '📰' },
-    { id: 'player_spotlight',  label: 'Player Spotlight',  icon: '⭐' },
-    { id: 'rivalry_breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
+    { id: 'power-rankings',    label: 'Power Rankings',    icon: '📊' },
+    { id: 'weekly-recap',      label: 'Weekly Recap',      icon: '📰' },
+    { id: 'player-spotlight',  label: 'Player Spotlight',  icon: '⭐' },
+    { id: 'rivalry-breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
   ]
 
   const generate = async () => {
@@ -322,27 +324,79 @@ function MediaCenter({ teams, games, players }) {
       const res = await fetch('/api/generate-article', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleType: type, teams, scores: games, players }),
+        body: JSON.stringify({ articleType: type, pin: commPin }),
       })
       const data = await res.json()
-      setArticle(data.article || data.error)
+      if (data.error) {
+        setArticle('❌ ' + data.error)
+      } else {
+        setArticle(data.article)
+      }
     } catch (e) { setArticle('Error generating article.') }
     setLoading(false)
+  }
+
+  const tryPin = async () => {
+    // Validate pin against coaches endpoint (same pattern as coaches.js)
+    setPinError(false)
+    const res = await fetch('/api/coaches/0', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinInput }),
+    })
+    if (res.status === 403) { setPinError(true); return }
+    onPinSet(pinInput)
+    setPinInput('')
   }
 
   return (
     <div>
       <SectionTitle sub="AI-Powered ESPN-Style Coverage">Media Center</SectionTitle>
+
+      {/* Commissioner PIN gate */}
+      {!commPin && (
+        <Card style={{ marginBottom: 20, maxWidth: 420 }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>🔐 Commissioner Login</div>
+          <div style={{ color: C.muted, fontSize: 13, marginBottom: 12 }}>Article generation requires commissioner access.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="password"
+              value={pinInput}
+              onChange={e => { setPinInput(e.target.value); setPinError(false) }}
+              onKeyDown={e => e.key === 'Enter' && tryPin()}
+              placeholder="Enter commissioner PIN"
+              style={{
+                flex: 1, background: C.surface, border: `1px solid ${pinError ? C.red : C.border}`,
+                borderRadius: 6, padding: '10px 12px', color: C.text, fontSize: 14, outline: 'none',
+              }}
+            />
+            <button onClick={tryPin} style={{
+              background: C.accent, color: '#000', border: 'none', borderRadius: 6,
+              padding: '10px 18px', cursor: 'pointer',
+              fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
+            }}>Unlock</button>
+          </div>
+          {pinError && <div style={{ color: C.red, fontSize: 12, marginTop: 6 }}>Incorrect PIN</div>}
+        </Card>
+      )}
+      {commPin && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Badge color={C.green}>🔓 Commissioner Mode Active</Badge>
+          <button onClick={() => onPinSet(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Lock</button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         {TYPES.map(t => <PillBtn key={t.id} active={type === t.id} onClick={() => setType(t.id)}>{t.icon} {t.label}</PillBtn>)}
       </div>
-      <button onClick={generate} disabled={loading} style={{
-        background: loading ? C.subtle : C.accent, color: loading ? C.muted : '#000',
+      <button onClick={generate} disabled={loading || !commPin} style={{
+        background: !commPin ? C.subtle : loading ? C.subtle : C.accent,
+        color: (!commPin || loading) ? C.muted : '#000',
         border: 'none', borderRadius: 8, padding: '14px 32px',
-        cursor: loading ? 'not-allowed' : 'pointer',
+        cursor: (!commPin || loading) ? 'not-allowed' : 'pointer',
         fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1,
         textTransform: 'uppercase', marginBottom: 24,
-      }}>{loading ? '⏳ Generating...' : '⚡ Generate Article'}</button>
+      }}>{loading ? '⏳ Generating...' : !commPin ? '🔒 Login to Generate' : '⚡ Generate Article'}</button>
 
       {article && (
         <Card>
@@ -529,6 +583,7 @@ export default function App() {
   const [tab, setTab]         = useState('Dashboard')
   const [data, setData]       = useState({ teams: [], games: [], players: [], scanLog: [] })
   const [loadingData, setLoadingData] = useState(true)
+  const [commPin, setCommPin] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -540,6 +595,12 @@ export default function App() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Restore commissioner PIN from session
+  useEffect(() => {
+    const p = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dynasty_comm_pin')
+    if (p) setCommPin(p)
+  }, [])
 
   return (
     <>
@@ -584,7 +645,7 @@ export default function App() {
               {tab === 'Standings'    && <Standings   teams={data.teams} />}
               {tab === 'Scores'       && <Scores      games={data.games} />}
               {tab === 'Player Stats' && <PlayerStats players={data.players} />}
-              {tab === 'Media Center' && <MediaCenter teams={data.teams} games={data.games} players={data.players} />}
+              {tab === 'Media Center' && <MediaCenter teams={data.teams} games={data.games} players={data.players} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin) }} />}
               {tab === 'Drive Sync'   && <DriveSync   onRefresh={fetchData} />}
             </>
           )}

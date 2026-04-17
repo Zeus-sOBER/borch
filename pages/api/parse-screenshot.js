@@ -343,12 +343,26 @@ async function saveToSupabase(data, coaches, humanTeams) {
 
     // Sync coach win/loss records from updated standings
     if (coaches?.length > 0) {
+      // Fetch saved team IDs so we can match by id first
+      const { data: savedTeams } = await supabase
+        .from('teams')
+        .select('id, team_name, name');
+
       for (const team of data.standings) {
         if (!team.team_name) continue;
         const teamKey = team.team_name.toLowerCase().trim();
-        const matchedCoach = coaches.find(
-          c => c.team?.toLowerCase().trim() === teamKey
+
+        // Find the DB team row for this standing
+        const dbTeam = (savedTeams || []).find(
+          t => (t.team_name || t.name || '').toLowerCase().trim() === teamKey
         );
+
+        // Match coach: prefer team_id link, fall back to name string
+        const matchedCoach = dbTeam
+          ? coaches.find(c => c.team_id != null && c.team_id === dbTeam.id)
+            || coaches.find(c => c.team?.toLowerCase().trim() === teamKey)
+          : coaches.find(c => c.team?.toLowerCase().trim() === teamKey);
+
         if (!matchedCoach?.id) continue;
 
         // Only update if standings have actual games played

@@ -324,7 +324,7 @@ function SeasonRecordEditor({ records = [], onChange }) {
 }
 
 // ── Coach detail / edit modal ──────────────────────────────────
-function CoachDetail({ coach, isCommissioner, pin, onSave, onClose }) {
+function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }) {
   const [editing, setEditing]   = useState(false)
   const [saving,  setSaving]    = useState(false)
   const [form,    setForm]      = useState({ ...coach })
@@ -485,7 +485,26 @@ function CoachDetail({ coach, isCommissioner, pin, onSave, onClose }) {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Input label="Coach Name" {...field('name')} />
-              <Input label="Current Team" {...field('team')} />
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Current Team</label>
+                <select
+                  value={form.team_id || ''}
+                  onChange={e => {
+                    const id = e.target.value ? Number(e.target.value) : null
+                    const t  = teams.find(t => t.id === id)
+                    setForm(f => ({ ...f, team_id: id, team: t?.name || f.team }))
+                  }}
+                  style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '10px 12px', color: C.text, fontSize: 14 }}
+                >
+                  <option value="">— select team —</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {form.team && !form.team_id && (
+                  <div style={{ color: C.accent, fontSize: 11, marginTop: 4 }}>Currently: {form.team} (not linked by ID yet)</div>
+                )}
+              </div>
               <Input label="Gamertag / Username" {...field('username')} placeholder="@handle" />
               <Input label="Joined Dynasty (date)" type="date" {...field('hire_date')} />
               <Input label="Alma Mater (fav real school)" {...field('alma_mater')} placeholder="e.g. Alabama" />
@@ -531,8 +550,8 @@ function CoachDetail({ coach, isCommissioner, pin, onSave, onClose }) {
 }
 
 // ── Add coach form ─────────────────────────────────────────────
-function AddCoachForm({ pin, onAdd, onClose }) {
-  const [form, setForm]   = useState({ name: '', team: '', username: '', coaching_style: '', alma_mater: '', bio: '', hire_date: '', is_active: true, is_commissioner: false, overall_wins: 0, overall_losses: 0, seasons_coached: 1, achievements: [], season_records: [] })
+function AddCoachForm({ pin, teams = [], onAdd, onClose }) {
+  const [form, setForm]   = useState({ name: '', team: '', team_id: null, username: '', coaching_style: '', alma_mater: '', bio: '', hire_date: '', is_active: true, is_commissioner: false, overall_wins: 0, overall_losses: 0, seasons_coached: 1, achievements: [], season_records: [] })
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
 
@@ -564,7 +583,23 @@ function AddCoachForm({ pin, onAdd, onClose }) {
         <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.text, marginBottom: 20, letterSpacing: 1 }}>ADD NEW COACH</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Input label="Coach Name *" {...field('name')} />
-          <Input label="Team" {...field('team')} />
+          <div>
+            <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Team</label>
+            <select
+              value={form.team_id || ''}
+              onChange={e => {
+                const id = e.target.value ? Number(e.target.value) : null
+                const t  = teams.find(t => t.id === id)
+                setForm(f => ({ ...f, team_id: id, team: t?.name || '' }))
+              }}
+              style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '10px 12px', color: C.text, fontSize: 14 }}
+            >
+              <option value="">— select team —</option>
+              {teams.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
           <Input label="Gamertag" {...field('username')} />
           <Input label="Joined Dynasty" type="date" {...field('hire_date')} />
           <Input label="Alma Mater" {...field('alma_mater')} />
@@ -629,6 +664,7 @@ function PinGate({ onUnlock }) {
 // ── Main page ──────────────────────────────────────────────────
 export default function CoachesPage() {
   const [coaches,     setCoaches]     = useState([])
+  const [teams,       setTeams]       = useState([])   // all teams from DB
   const [loading,     setLoading]     = useState(true)
   const [selected,    setSelected]    = useState(null)
   const [showAdd,     setShowAdd]     = useState(false)
@@ -638,9 +674,14 @@ export default function CoachesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/coaches')
-    const data = await res.json()
-    setCoaches(data.coaches || [])
+    const [coachRes, teamRes] = await Promise.all([
+      fetch('/api/coaches'),
+      fetch('/api/league-data'),
+    ])
+    const coachData = await coachRes.json()
+    const teamData  = await teamRes.json()
+    setCoaches(coachData.coaches || [])
+    setTeams(teamData.teams || [])
     setLoading(false)
   }, [])
 
@@ -779,6 +820,7 @@ export default function CoachesPage() {
         {selected && (
           <CoachDetail
             coach={selected}
+            teams={teams}
             isCommissioner={!!commPin}
             pin={commPin}
             onSave={handleSave}
@@ -788,7 +830,7 @@ export default function CoachesPage() {
 
         {/* Add modal */}
         {showAdd && (
-          <AddCoachForm pin={commPin} onAdd={handleAdd} onClose={() => setShowAdd(false)} />
+          <AddCoachForm pin={commPin} teams={teams} onAdd={handleAdd} onClose={() => setShowAdd(false)} />
         )}
       </div>
     </>

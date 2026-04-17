@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     supabase.from('games').select('*').order('week', { ascending: true }),
     supabase.from('players').select('*'),
     supabase.from('scan_log').select('*').order('created_at', { ascending: false }).limit(20),
-    supabase.from('coaches').select('name, team, coaching_style, overall_wins, overall_losses').eq('is_active', true),
+    supabase.from('coaches').select('name, team, team_id, coaching_style, overall_wins, overall_losses').eq('is_active', true),
   ])
 
   const coaches = coachesRes.data || []
@@ -19,9 +19,11 @@ export default async function handler(req, res) {
   const teams = (teamsRes.data || []).map((t, i) => {
     // Support both column names: team_name (new schema) and name (original schema)
     const teamKey = (t.team_name || t.name || '').toLowerCase().trim()
-    const matchedCoach = coaches.find(
-      c => c.team?.toLowerCase().trim() === teamKey
-    )
+
+    // Match by team_id first (authoritative), then fall back to name matching
+    const matchedCoach = coaches.find(c => c.team_id != null && c.team_id === t.id)
+      || coaches.find(c => c.team?.toLowerCase().trim() === teamKey)
+
     return {
       ...t,
       name:  t.team_name || t.name || 'Unknown',
