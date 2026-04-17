@@ -55,12 +55,12 @@ export default async function handler(req, res) {
     }
 
     // Check scan_log to find files already processed
+    // Note: the scan_log schema does not have a 'status' column — just check existence of file_id
     const fileIds = processableFiles.map(f => f.id);
     const { data: alreadyScanned } = await supabase
       .from('scan_log')
       .select('file_id')
-      .in('file_id', fileIds)
-      .eq('status', 'success');
+      .in('file_id', fileIds);
 
     const scannedIds = new Set((alreadyScanned || []).map(r => r.file_id));
     const newFiles = processableFiles.filter(f => !scannedIds.has(f.id));

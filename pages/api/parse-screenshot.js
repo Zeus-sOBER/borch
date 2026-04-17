@@ -127,14 +127,19 @@ export default async function handler(req, res) {
     // ── Log to Narrative Hub ────────────────────────────────────────────────
     await logParsedResultToNarrative(parsedResult, coaches, humanTeams);
 
-    // Log the scan
+    // Log the scan — only insert columns that exist in the schema
+    const totalRecords =
+      (saveResult?.games     || 0) +
+      (saveResult?.players   || 0) +
+      (saveResult?.standings || 0) +
+      (saveResult?.recruiting|| 0) +
+      (saveResult?.championship ? 1 : 0);
+
     await supabase.from('scan_log').insert({
-      file_id: fileId,
-      file_name: fileName || fileId,
-      file_type: isGoogleDoc ? 'gdoc' : 'image',
-      detected_type: parsedResult.type,
-      status: 'success',
-      parsed_data: parsedResult
+      file_id:        fileId,
+      file_name:      fileName || fileId,
+      data_type:      parsedResult.type,
+      records_parsed: totalRecords,
     });
 
     res.status(200).json({
