@@ -6,7 +6,8 @@ function adminDb() {
 
 export default async function handler(req, res) {
   const { id } = req.query
-  const { pin, ...body } = req.body || {}
+  // Strip identity/read-only columns — Postgres throws if you try to SET id on a GENERATED ALWAYS column
+  const { pin, id: _id, created_at: _ca, ...body } = req.body || {}
 
   if (pin !== process.env.COMMISSIONER_PIN) {
     return res.status(403).json({ error: 'Invalid commissioner PIN' })
