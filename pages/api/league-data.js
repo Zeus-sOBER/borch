@@ -5,17 +5,48 @@ export default async function handler(req, res) {
 
   const season = req.query.season || 1
 
-  const [teamsRes, gamesRes, playersRes, logRes] = await Promise.all([
-    supabase.from('teams').select('*').eq('season', season).order('rank', { ascending: true }),
-    supabase.from('games').select('*').eq('season', season).order('week', { ascending: true }),
-    supabase.from('players').select('*').eq('season', season),
+  const [teamsRes, gamesRes, playersRes, logRes, coachesRes] = await Promise.all([
+    supabase.from('teams').select('*').order('wins', { ascending: false }),
+    supabase.from('games').select('*').order('week', { ascending: true }),
+    supabase.from('players').select('*'),
     supabase.from('scan_log').select('*').order('created_at', { ascending: false }).limit(20),
+    supabase.from('coaches').select('name, team, coaching_style, overall_wins, overall_losses').eq('is_active', true),
   ])
 
+  const coaches = coachesRes.data || []
+
+  // ── Normalize teams: rename team_name → name, join coach from coaches table ──
+  const teams = (teamsRes.data || []).map((t, i) => {
+    const matchedCoach = coaches.find(
+      c => c.team?.toLowerCase() === t.team_name?.toLowerCase()
+    )
+    return {
+      ...t,
+      name:  t.team_name || t.name || 'Unknown',
+      coach: matchedCoach?.name || t.coach || null,
+      coaching_style: matchedCoach?.coaching_style || null,
+      rank:  t.rank || i + 1,
+    }
+  })
+
+  // ── Normalize games: ensure home/away fields are consistent ──
+  const games = (gamesRes.data || []).map(g => ({
+    ...g,
+    status: g.is_final ? 'Final' : (g.status || 'Scheduled'),
+  }))
+
+  // ── Normalize players: flatten stats JSONB for display ──
+  const players = (playersRes.data || []).map(p => ({
+    ...p,
+    pos:   p.position || p.pos || null,
+    stats: p.stats || {},
+    yards: p.yards ?? p.stats?.pass_yds ?? p.stats?.rush_yds ?? p.stats?.rec_yds ?? 0,
+  })).sort((a, b) => (b.yards || 0) - (a.yards || 0))
+
   res.status(200).json({
-    teams: teamsRes.data || [],
-    games: gamesRes.data || [],
-    players: playersRes.data || [],
+    teams,
+    games,
+    players,
     scanLog: logRes.data || [],
   })
 }

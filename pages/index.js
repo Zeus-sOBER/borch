@@ -362,22 +362,28 @@ function MediaCenter({ teams, games, players }) {
 
 // ── Drive Sync ─────────────────────────────────────────────────
 function DriveSync({ onRefresh }) {
-  const [files, setFiles]     = useState([])
-  const [loading, setLoading] = useState(false)
-  const [parsing, setParsing] = useState(null)
-  const [dataType, setDataType] = useState('standings')
-  const [results, setResults] = useState({})
+  const [files, setFiles]       = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [parsing, setParsing]   = useState(null)
+  const [results, setResults]   = useState({})
 
-  const DATA_TYPES = [
-    { id: 'standings',    label: 'Standings / Records' },
-    { id: 'scores',       label: 'Scores & Schedule' },
-    { id: 'player_stats', label: 'Player Stats' },
+  // Type hint is optional — AI auto-detects regardless.
+  // 'auto' = no hint given (recommended default)
+  const [typeHint, setTypeHint] = useState('auto')
+
+  const TYPE_HINTS = [
+    { id: 'auto',        label: '✨ Auto-Detect',        desc: 'AI figures it out — works for any screenshot' },
+    { id: 'standings',   label: '📊 Standings',           desc: 'Win/loss records, conference standings' },
+    { id: 'scores',      label: '🏈 Scores',              desc: 'Scoreboards, game results' },
+    { id: 'player_stats',label: '⭐ Player Stats',         desc: 'Stat leaders, individual numbers' },
+    { id: 'recruiting',  label: '📋 Recruiting',          desc: 'Commitments, visits, offers' },
+    { id: 'championship',label: '🏆 Championship',        desc: 'Trophy screens, bowl/CFP results' },
   ]
 
   const loadFiles = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/drive-files')
+      const res  = await fetch('/api/drive-files')
       const data = await res.json()
       setFiles(data.files || [])
     } catch (e) { console.error(e) }
@@ -392,7 +398,13 @@ function DriveSync({ onRefresh }) {
       const res = await fetch('/api/parse-screenshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId: file.id, mimeType: file.mimeType, dataType, fileName: file.name }),
+        body: JSON.stringify({
+          fileId:   file.id,
+          mimeType: file.mimeType,
+          fileName: file.name,
+          // typeHint passes optional context to AI; 'auto' means no hint
+          typeHint: typeHint !== 'auto' ? typeHint : undefined,
+        }),
       })
       const data = await res.json()
       setResults(r => ({ ...r, [file.id]: data }))
@@ -403,48 +415,95 @@ function DriveSync({ onRefresh }) {
     setParsing(null)
   }
 
+  // Build a human-readable saved count from the API response
+  const getSavedSummary = (result) => {
+    if (!result?.saved) return ''
+    const { games, players, standings, championship, recruiting } = result.saved
+    const parts = []
+    if (games)      parts.push(`${games} game${games !== 1 ? 's' : ''}`)
+    if (standings)  parts.push(`${standings} team${standings !== 1 ? 's' : ''}`)
+    if (players)    parts.push(`${players} player${players !== 1 ? 's' : ''}`)
+    if (recruiting) parts.push(`${recruiting} recruit${recruiting !== 1 ? 's' : ''}`)
+    if (championship) parts.push('1 championship')
+    return parts.length ? parts.join(', ') + ' saved' : 'data saved'
+  }
+
   return (
     <div>
-      <SectionTitle sub="Pull screenshots from your shared Google Drive folder">Drive Sync</SectionTitle>
+      <SectionTitle sub="Pull screenshots and Google Docs from your shared Drive folder">Drive Sync</SectionTitle>
+
+      {/* Type hint selector */}
       <Card style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>What type of screenshot are you scanning?</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {DATA_TYPES.map(t => <PillBtn key={t.id} active={dataType === t.id} onClick={() => setDataType(t.id)}>{t.label}</PillBtn>)}
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Scan Mode</div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>
+          Auto-Detect works for everything — the AI reads the screenshot and decides. Use a specific type only if auto-detect is getting it wrong.
         </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {TYPE_HINTS.map(t => (
+            <PillBtn key={t.id} active={typeHint === t.id} onClick={() => setTypeHint(t.id)}>
+              {t.label}
+            </PillBtn>
+          ))}
+        </div>
+        {typeHint !== 'auto' && (
+          <div style={{ marginTop: 10, color: C.muted, fontSize: 12 }}>
+            {TYPE_HINTS.find(t => t.id === typeHint)?.desc}
+          </div>
+        )}
       </Card>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ color: C.muted, fontSize: 14 }}>{files.length} screenshot{files.length !== 1 ? 's' : ''} found</div>
+        <div style={{ color: C.muted, fontSize: 14 }}>{files.length} file{files.length !== 1 ? 's' : ''} in Drive folder</div>
         <button onClick={loadFiles} disabled={loading} style={{ background: C.card, color: loading ? C.muted : C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>
           {loading ? '⏳ Loading...' : '🔄 Refresh'}
         </button>
       </div>
 
       {files.length === 0 && !loading && (
-        <Card><p style={{ color: C.muted, margin: 0 }}>No images found. Make sure the shared Drive folder has screenshots uploaded and the service account has Viewer access.</p></Card>
+        <Card><p style={{ color: C.muted, margin: 0 }}>No files found. Upload any CFB26 screenshot or Google Doc to the shared Drive folder, then hit Refresh.</p></Card>
       )}
 
       <div style={{ display: 'grid', gap: 12 }}>
         {files.map(file => {
-          const result   = results[file.id]
+          const result    = results[file.id]
           const isParsing = parsing === file.id
+          const isDoc     = file.mimeType === 'application/vnd.google-apps.document'
+          const savedSummary = getSavedSummary(result)
+
           return (
             <Card key={file.id} style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 32 }}>🖼️</div>
+              <div style={{ fontSize: 32 }}>{isDoc ? '📄' : '🖼️'}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
-                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Uploaded {new Date(file.createdTime).toLocaleString()}</div>
-                {result?.success && <div style={{ color: C.green, fontSize: 12, marginTop: 4 }}>✅ Parsed {Object.values(result.data)[0]?.length || 0} records — dynasty updated</div>}
-                {result?.error  && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}</div>}
+                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                  {isDoc ? 'Google Doc' : 'Image'} · Uploaded {new Date(file.createdTime).toLocaleString()}
+                </div>
+                {result?.success && (
+                  <div style={{ marginTop: 6 }}>
+                    <span style={{ color: C.green, fontSize: 12 }}>✅ </span>
+                    <span style={{ color: C.accent, fontSize: 12, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      {result.detectedType || 'data'}
+                    </span>
+                    <span style={{ color: C.green, fontSize: 12 }}> — {savedSummary}</span>
+                    {result.summary && (
+                      <div style={{ color: C.muted, fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>{result.summary}</div>
+                    )}
+                  </div>
+                )}
+                {result?.error && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}</div>}
               </div>
-              <button onClick={() => parse(file)} disabled={isParsing || result?.success} style={{
-                background: result?.success ? C.green + '22' : isParsing ? C.subtle : C.accent,
-                color: result?.success ? C.green : isParsing ? C.muted : '#000',
-                border: `1px solid ${result?.success ? C.green : C.accent}`,
-                borderRadius: 6, padding: '10px 20px',
-                cursor: result?.success || isParsing ? 'default' : 'pointer',
-                fontFamily: "'Oswald', sans-serif", fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
+              <button
+                onClick={() => parse(file)}
+                disabled={isParsing || result?.success}
+                style={{
+                  background: result?.success ? C.green + '22' : isParsing ? C.subtle : C.accent,
+                  color:      result?.success ? C.green : isParsing ? C.muted : '#000',
+                  border:     `1px solid ${result?.success ? C.green : C.accent}`,
+                  borderRadius: 6, padding: '10px 20px',
+                  cursor: result?.success || isParsing ? 'default' : 'pointer',
+                  fontFamily: "'Oswald', sans-serif", fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
+                }}
+              >
                 {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan with AI'}
               </button>
             </Card>
@@ -453,12 +512,12 @@ function DriveSync({ onRefresh }) {
       </div>
 
       <Card style={{ marginTop: 24, borderColor: C.accent + '33' }}>
-        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>How to add screenshots</div>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>How Drive Sync works</div>
         <ol style={{ color: C.muted, fontSize: 13, lineHeight: 2, margin: 0, paddingLeft: 20 }}>
-          <li>Open the shared Google Drive folder link (pinned in your league chat)</li>
-          <li>Upload any screenshot from EA CFB 26 — standings, scoreboard, or stat screen</li>
-          <li>Come back here, hit <strong style={{ color: C.text }}>Refresh</strong>, then <strong style={{ color: C.text }}>Scan with AI</strong></li>
-          <li>The dynasty updates automatically across all tabs</li>
+          <li>Upload <strong style={{ color: C.text }}>any</strong> CFB26 screenshot or Google Doc to the shared Drive folder</li>
+          <li>Hit <strong style={{ color: C.text }}>Refresh</strong> to see new files appear above</li>
+          <li>Click <strong style={{ color: C.text }}>Scan with AI</strong> — the AI reads it and saves what it finds</li>
+          <li>Standings, scores, stats, recruiting, and championships all update automatically</li>
         </ol>
       </Card>
     </div>
