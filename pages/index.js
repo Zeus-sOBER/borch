@@ -132,8 +132,10 @@ function BottomNav({ tab, setTab }) {
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries }) {
   const finalGames  = games.filter(g => g.status === 'Final')
   const recentGames = [...finalGames].reverse().slice(0, 3)
-  const topTeam     = teams[0]
-  const weeks       = games.length ? Math.max(...games.map(g => g.week)) : 0
+  // Only show #1 ranked if we have actual game data to rank by
+  const rankedTeams = [...teams].sort((a, b) => b.wins - a.wins || (b.pts - b.pts_against) - (a.pts - a.pts_against))
+  const topTeam     = finalGames.length > 0 ? rankedTeams[0] : null
+  const weeks       = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(Boolean)) : 0
   const topPasser   = players.find(p => p.pos === 'QB')
   const topRusher   = players.find(p => p.pos === 'RB')
   const topReceiver = players.find(p => p.pos === 'WR')
@@ -201,7 +203,9 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries 
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: "'Oswald', sans-serif", color: C.text, fontSize: 14 }}>{t.wins}-{t.losses}</div>
-                <Badge color={t.streak?.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+                {t.streak && t.streak !== 'unknown' && t.streak !== '—' && (
+                  <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+                )}
               </div>
             </div>
           ))}
@@ -312,7 +316,12 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries 
 
 // ── Standings ──────────────────────────────────────────────────
 function Standings({ teams, isMobile }) {
-  const sorted = [...teams].sort((a, b) => (a.rank || 99) - (b.rank || 99) || b.wins - a.wins)
+  // Sort: most wins first, then point differential as tiebreaker, then rank if set
+  const sorted = [...teams].sort((a, b) =>
+    b.wins - a.wins ||
+    ((b.pts - b.pts_against) - (a.pts - a.pts_against)) ||
+    (a.rank || 99) - (b.rank || 99)
+  )
   const PLAYOFF_LINE = 4 // top 4 make playoff
 
   return (
@@ -383,7 +392,10 @@ function Standings({ teams, isMobile }) {
                           </span>
                         </td>
                         <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center' }}>
-                          <Badge color={t.streak?.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+                          {t.streak && t.streak !== 'unknown' && t.streak !== '—'
+                            ? <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+                            : <span style={{ color: C.subtle, fontSize: 12 }}>—</span>
+                          }
                         </td>
                       </tr>
                     </>

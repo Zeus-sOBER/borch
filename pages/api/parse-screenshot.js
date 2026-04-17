@@ -169,10 +169,10 @@ export default async function handler(req, res) {
     console.error('Parse error:', error);
 
     await supabase.from('scan_log').insert({
-      file_id: fileId,
-      file_name: fileName || fileId,
-      status: 'error',
-      parsed_data: { error: error.message }
+      file_id:        fileId,
+      file_name:      fileName || fileId,
+      data_type:      'error',
+      records_parsed: 0,
     }).catch(() => {});
 
     res.status(500).json({ error: 'Failed to parse file', details: error.message });
@@ -183,28 +183,55 @@ export default async function handler(req, res) {
 async function parseScheduleDoc(docText, coaches, humanTeams) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
 
-  const prompt = `You are importing a college football dynasty league SEASON SCHEDULE from a document.
+  const prompt = `You are importing a college football dynasty league schedule/results from a spreadsheet or document.
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
 
-The document contains the full season schedule — matchups for every week, possibly across the whole season.
-Extract ALL matchups. These are UPCOMING games (no scores yet). Ignore any games that already have final scores (those should be scanned separately with Auto-Detect).
+The document may contain BOTH upcoming scheduled games AND completed games with scores.
+You must handle both types:
+
+TYPE 1 — COMPLETED GAME (has a score anywhere in the row — Notes column, Score column, or inline):
+  Examples of score indicators: "70-3 Alabama Win", "50-24", "W 21-7", "Alabama 70, USF 3"
+  - Set "is_final": true
+  - Parse the score carefully. The format is usually "WinnerScore-LoserScore WinnerName Win"
+  - Determine which team won, then assign:
+    - If home_team won: home_score = higher number, away_score = lower number
+    - If away_team won: away_score = higher number, home_score = lower number
+  - Always double-check: the winner's score should be HIGHER than the loser's score
+
+TYPE 2 — UPCOMING GAME (no score present):
+  - Set "is_final": false
+  - Set "home_score": null, "away_score": null
+
+SKIP these rows entirely:
+  - Section header rows like "WEEK 3 — EARLY SEASON", "WEEK 14 — CONF. CHAMPIONSHIPS"
+  - Empty rows (no team names)
+  - Rows with only "BYE WEEK" in Opponent Type
 
 DOCUMENT CONTENT:
 ---
-${docText.substring(0, 10000)}
+${docText.substring(0, 12000)}
 ---
 
 Return ONLY a JSON object (no markdown, no explanation):
 {
   "type": "schedule",
-  "summary": "Imported schedule: N weeks, N total games",
+  "summary": "Imported X scheduled games and Y completed results",
   "games": [
     {
       "home_team": "Team Name",
       "away_team": "Team Name",
       "week": 1,
+      "is_final": true,
+      "home_score": 70,
+      "away_score": 3,
+      "game_type": "regular"
+    },
+    {
+      "home_team": "Team Name",
+      "away_team": "Team Name",
+      "week": 2,
       "is_final": false,
       "home_score": null,
       "away_score": null,
@@ -214,16 +241,15 @@ Return ONLY a JSON object (no markdown, no explanation):
 }
 
 Rules:
-- Set "is_final": false for ALL games (these are upcoming matchups)
-- Set "home_score": null and "away_score": null for ALL games
-- Set "game_type" to one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
-- Week 14 games are typically "conference_championship"
-- Weeks 15-18 are playoff/bowl games
-- Include ALL matchups you find, not just human-team games`;
+- "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
+- Week 14 = "conference_championship", weeks 15-18 = playoff/bowl
+- Include ALL game rows, not just human-team games
+- Week 0 is valid — keep it as week 0
+- Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
+    max_tokens: 6000,
     messages: [{ role: 'user', content: prompt }]
   });
 
@@ -417,6 +443,77 @@ Only include arrays that have actual extracted data.`;
   return parsed;
 }
 
+// ─── Recompute standings from all final game results ──────────────────────────
+// Called any time new final scores are saved so the teams table stays in sync
+// without needing a separate standings screenshot.
+async function recomputeStandingsFromGames() {
+  try {
+    // Fetch all games that have actual scores (both columns non-null)
+    const { data: finalGames, error } = await supabase
+      .from('games')
+      .select('home_team, away_team, home_score, away_score, week, season')
+      .not('home_score', 'is', null)
+      .not('away_score', 'is', null);
+
+    if (error || !finalGames?.length) return;
+
+    // Build per-team record map
+    const records = {};
+    // Track game order for streak (week asc)
+    const teamGameHistory = {}; // teamName → [{week, won}]
+
+    for (const g of finalGames) {
+      if (!g.home_team || !g.away_team) continue;
+      const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
+
+      for (const [team, isHome] of [[g.home_team, true], [g.away_team, false]]) {
+        if (!records[team]) records[team] = { wins: 0, losses: 0, pts: 0, pts_against: 0, season: g.season ?? 1 };
+        if (!teamGameHistory[team]) teamGameHistory[team] = [];
+
+        const won = isHome ? homeWon : !homeWon;
+        const scored    = isHome ? (g.home_score ?? 0) : (g.away_score ?? 0);
+        const conceded  = isHome ? (g.away_score ?? 0) : (g.home_score ?? 0);
+
+        if (won) records[team].wins++;
+        else     records[team].losses++;
+        records[team].pts         += scored;
+        records[team].pts_against += conceded;
+        records[team].season       = g.season ?? 1;
+
+        teamGameHistory[team].push({ week: g.week ?? 0, won });
+      }
+    }
+
+    // Compute streak for each team (most recent N consecutive same result)
+    for (const [team, rec] of Object.entries(records)) {
+      const history = (teamGameHistory[team] || []).sort((a, b) => (b.week ?? 0) - (a.week ?? 0));
+      let streak = null;
+      if (history.length > 0) {
+        const lastResult = history[0].won;
+        let count = 0;
+        for (const g of history) {
+          if (g.won === lastResult) count++;
+          else break;
+        }
+        streak = (lastResult ? 'W' : 'L') + count;
+      }
+
+      await supabase.from('teams').upsert({
+        name:        team,
+        season:      rec.season,
+        wins:        rec.wins,
+        losses:      rec.losses,
+        pts:         rec.pts,
+        pts_against: rec.pts_against,
+        streak:      streak,
+      }, { onConflict: 'name,season' });
+    }
+  } catch (err) {
+    // Non-critical — never crash the main flow
+    console.error('[recomputeStandings] error:', err.message);
+  }
+}
+
 // ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
 async function saveToSupabase(data, coaches, humanTeams) {
   const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0 };
@@ -428,20 +525,29 @@ async function saveToSupabase(data, coaches, humanTeams) {
   };
 
   // Save games
+  let hasFinalGames = false;
   if (data.games?.length > 0) {
     for (const game of data.games) {
       if (!game.home_team || !game.away_team) continue;
+      const isFinal = game.is_final !== undefined && game.is_final !== null
+        ? game.is_final
+        : (data.source !== 'schedule_doc' && data.source !== 'schedule_image');
+      if (isFinal && game.home_score != null && game.away_score != null) hasFinalGames = true;
       const { error } = await supabase.from('games').upsert({
-        home_team: game.home_team,
-        away_team: game.away_team,
+        home_team:  game.home_team,
+        away_team:  game.away_team,
         home_score: game.home_score ?? null,
         away_score: game.away_score ?? null,
-        week: game.week ?? data.week ?? null,
-        // Explicitly respect is_final from parsed data; only default to true for image scans (not schedule imports)
-        is_final: game.is_final !== undefined && game.is_final !== null ? game.is_final : (data.source !== 'schedule_doc' && data.source !== 'schedule_image'),
-        game_type: game.game_type ?? 'regular'
+        week:       game.week ?? data.week ?? null,
+        is_final:   isFinal,
+        game_type:  game.game_type ?? 'regular'
       }, { onConflict: 'home_team,away_team,week' });
       if (!error) saved.games++;
+    }
+
+    // Any time we save final scores, rebuild team standings from all game results
+    if (hasFinalGames) {
+      await recomputeStandingsFromGames();
     }
   }
 
