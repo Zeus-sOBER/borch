@@ -15,7 +15,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const TABS = ['Dashboard', 'Standings', 'Scores', 'Player Stats', 'Media Center', 'Drive Sync']
+const TABS = ['Dashboard', 'Standings', 'Season', 'Stats', 'Media', 'Sync']
 
 function Badge({ children, color = C.accent }) {
   return (
@@ -29,12 +29,17 @@ function Badge({ children, color = C.accent }) {
   )
 }
 
-function Card({ children, style = {} }) {
+function Card({ children, style = {}, onClick }) {
   return (
-    <div style={{
-      background: C.card, border: `1px solid ${C.border}`,
-      borderRadius: 10, padding: 20, ...style,
-    }}>{children}</div>
+    <div
+      onClick={onClick}
+      style={{
+        background: C.card, border: `1px solid ${C.border}`,
+        borderRadius: 10, padding: 20,
+        cursor: onClick ? 'pointer' : undefined,
+        ...style,
+      }}
+    >{children}</div>
   )
 }
 
@@ -209,49 +214,138 @@ function Standings({ teams }) {
   )
 }
 
-// ── Scores ─────────────────────────────────────────────────────
-function Scores({ games }) {
-  const weeks = [...new Set(games.map(g => g.week))].sort((a, b) => b - a)
-  const [week, setWeek] = useState(weeks[0] || 1)
-  useEffect(() => { if (weeks.length) setWeek(weeks[0]) }, [games.length])
-  const filtered = games.filter(g => g.week === week)
+// ── Season ─────────────────────────────────────────────────────
+const WEEK_SHORT = { 14: 'Conf Champ', 15: 'CFP R1', 16: 'CFP QF', 17: 'CFP SF', 18: 'Natl Champ' }
+const SEASON_PHASES = [
+  { range: [1,  4],  label: 'EARLY SEASON',         sub: 'Non-conference play · Records still forming' },
+  { range: [5,  9],  label: 'CONFERENCE PLAY',       sub: 'Division races taking shape · Every loss stings' },
+  { range: [10, 13], label: 'LATE SEASON',           sub: 'Rivalry week incoming · CFP positioning is everything' },
+  { range: [14, 14], label: 'CONF. CHAMPIONSHIPS',   sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
+  { range: [15, 15], label: 'CFP FIRST ROUND',       sub: '12-team playoff begins · Road to the national title starts here' },
+  { range: [16, 16], label: 'CFP QUARTERFINALS',     sub: '8 teams remain · One loss and your season is over' },
+  { range: [17, 17], label: 'CFP SEMIFINALS',        sub: 'Final four · Two spots in the National Championship' },
+  { range: [18, 99], label: 'NATIONAL CHAMPIONSHIP', sub: 'One game · One champion · Dynasty legacy on the line' },
+]
+function getPhase(w) {
+  return SEASON_PHASES.find(p => w >= p.range[0] && w <= p.range[1]) || { label: `WEEK ${w}`, sub: '' }
+}
+
+function Season({ games, teams }) {
+  const humanNames = new Set(teams.map(t => (t.name || t.team_name || '').toLowerCase()))
+  const finalGames = games.filter(g => g.is_final || g.status === 'Final')
+  const currentWeek = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(Boolean)) : 1
+  const [selectedWeek, setSelectedWeek] = useState(currentWeek)
+  useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
+
+  const weeksWithGames = new Set(games.map(g => g.week).filter(Boolean))
+  const allWeeks = Array.from({ length: 18 }, (_, i) => i + 1)
+  const weekGames = games.filter(g => g.week === selectedWeek)
+  const phase = getPhase(selectedWeek)
 
   return (
     <div>
-      <SectionTitle sub="Game Results & Schedule">Scores & Schedule</SectionTitle>
-      {games.length === 0
-        ? <Card><p style={{ color: C.muted }}>No game data yet.</p></Card>
-        : (
-          <>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-              {weeks.map(w => <PillBtn key={w} active={week === w} onClick={() => setWeek(w)}>Week {w}</PillBtn>)}
-            </div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {filtered.map(g => (
-                <Card key={g.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <Badge color={g.status === 'Final' ? C.muted : C.blue}>{g.status}</Badge>
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ color: g.home_score > g.away_score ? C.text : C.muted, fontWeight: 700, fontSize: 18 }}>{g.home_team}</div>
-                        <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Home</div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        {g.status === 'Final'
-                          ? <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 32, color: C.accent, letterSpacing: 2 }}>{g.home_score} – {g.away_score}</div>
-                          : <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.muted }}>vs</div>}
-                      </div>
-                      <div>
-                        <div style={{ color: g.away_score > g.home_score ? C.text : C.muted, fontWeight: 700, fontSize: 18 }}>{g.away_team}</div>
-                        <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Away</div>
-                      </div>
+      <SectionTitle sub={phase.sub}>{phase.label}</SectionTitle>
+
+      {/* Week timeline bar */}
+      <div style={{ overflowX: 'auto', marginBottom: 28, paddingBottom: 6 }}>
+        <div style={{ display: 'flex', gap: 5, minWidth: 'max-content' }}>
+          {allWeeks.map(w => {
+            const hasGames   = weeksWithGames.has(w)
+            const hasFinal   = games.some(g => g.week === w && (g.is_final || g.status === 'Final'))
+            const isSelected = w === selectedWeek
+            const isCurrent  = w === currentWeek
+            const label      = WEEK_SHORT[w] || `Wk ${w}`
+            return (
+              <button key={w} onClick={() => setSelectedWeek(w)} style={{
+                position: 'relative', padding: '8px 11px', borderRadius: 6, cursor: 'pointer',
+                whiteSpace: 'nowrap', fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 0.4,
+                border: `2px solid ${isSelected ? C.accent : isCurrent ? C.accent + '66' : hasGames ? C.border : C.subtle + '44'}`,
+                background: isSelected ? C.accent : hasFinal ? C.surface : 'transparent',
+                color: isSelected ? '#000' : hasGames ? C.text : C.subtle,
+                fontWeight: isSelected || isCurrent ? 700 : 400,
+              }}>
+                {label}
+                {isCurrent && !isSelected && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, borderRadius: '50%', background: C.accent, border: `2px solid ${C.bg}` }} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Games grid */}
+      {weekGames.length === 0 ? (
+        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📅</div>
+          <div style={{ color: C.text, fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1, marginBottom: 8 }}>
+            No games for Week {selectedWeek}
+          </div>
+          <div style={{ color: C.muted, fontSize: 13 }}>
+            Scan a screenshot or upload a schedule Google Doc/Sheet to Drive, then import it from the Sync tab.
+          </div>
+        </Card>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+          {weekGames.map(g => {
+            const isFinal   = g.is_final || g.status === 'Final'
+            const homeWon   = isFinal && g.home_score > g.away_score
+            const awayWon   = isFinal && g.away_score > g.home_score
+            const homeHuman = humanNames.has((g.home_team || '').toLowerCase())
+            const awayHuman = humanNames.has((g.away_team || '').toLowerCase())
+            const gameLabel = g.game_type && g.game_type !== 'regular' ? g.game_type.replace(/_/g, ' ') : null
+            return (
+              <Card key={g.id} style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <Badge color={isFinal ? C.muted : C.blue}>{isFinal ? 'Final' : 'Scheduled'}</Badge>
+                  {gameLabel && <Badge color={C.accent}>{gameLabel}</Badge>}
+                </div>
+                {/* Home */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isFinal ? 8 : 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    {homeHuman && <span style={{ color: C.accent, fontSize: 9 }}>◆</span>}
+                    <div>
+                      <div style={{ color: homeWon ? C.text : isFinal ? C.muted : C.text, fontWeight: homeWon ? 700 : 400, fontSize: 16 }}>{g.home_team}</div>
+                      <div style={{ color: C.subtle, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Home</div>
                     </div>
                   </div>
-                </Card>
-              ))}
+                  {isFinal && <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 30, color: homeWon ? C.accent : C.muted, lineHeight: 1 }}>{g.home_score}</span>}
+                </div>
+                {!isFinal && <div style={{ textAlign: 'center', fontFamily: "'Oswald', sans-serif", color: C.subtle, fontSize: 12, letterSpacing: 3, margin: '6px 0' }}>VS</div>}
+                {/* Away */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    {awayHuman && <span style={{ color: C.accent, fontSize: 9 }}>◆</span>}
+                    <div>
+                      <div style={{ color: awayWon ? C.text : isFinal ? C.muted : C.text, fontWeight: awayWon ? 700 : 400, fontSize: 16 }}>{g.away_team}</div>
+                      <div style={{ color: C.subtle, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Away</div>
+                    </div>
+                  </div>
+                  {isFinal && <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 30, color: awayWon ? C.accent : C.muted, lineHeight: 1 }}>{g.away_score}</span>}
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Season phase legend */}
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 28 }}>
+        {SEASON_PHASES.map(p => {
+          const active = selectedWeek >= p.range[0] && selectedWeek <= p.range[1]
+          return (
+            <div key={p.label} onClick={() => setSelectedWeek(p.range[0])} style={{
+              padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+              background: active ? C.accent + '22' : 'transparent',
+              border: `1px solid ${active ? C.accent + '55' : C.subtle + '44'}`,
+              color: active ? C.accent : C.subtle, fontSize: 11,
+              fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5,
+            }}>
+              {p.range[0] === p.range[1] ? `Wk ${p.range[0]}` : `Wks ${p.range[0]}–${p.range[1]}`} · {p.label}
             </div>
-          </>
-        )}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -507,12 +601,13 @@ function DriveSync({ onRefresh }) {
   const [typeHint, setTypeHint] = useState('auto')
 
   const TYPE_HINTS = [
-    { id: 'auto',        label: '✨ Auto-Detect',        desc: 'AI figures it out — works for any screenshot' },
-    { id: 'standings',   label: '📊 Standings',           desc: 'Win/loss records, conference standings' },
-    { id: 'scores',      label: '🏈 Scores',              desc: 'Scoreboards, game results' },
-    { id: 'player_stats',label: '⭐ Player Stats',         desc: 'Stat leaders, individual numbers' },
-    { id: 'recruiting',  label: '📋 Recruiting',          desc: 'Commitments, visits, offers' },
-    { id: 'championship',label: '🏆 Championship',        desc: 'Trophy screens, bowl/CFP results' },
+    { id: 'auto',        label: '✨ Auto-Detect',  desc: 'AI figures it out — works for any screenshot or doc' },
+    { id: 'schedule',    label: '📅 Schedule',     desc: 'Full season schedule — imports upcoming matchups (no scores needed). Works with Google Docs, Sheets, or screenshots of the schedule screen.' },
+    { id: 'standings',   label: '📊 Standings',    desc: 'Win/loss records, conference standings' },
+    { id: 'scores',      label: '🏈 Scores',       desc: 'Scoreboards, game results' },
+    { id: 'player_stats',label: '⭐ Player Stats',  desc: 'Stat leaders, individual numbers' },
+    { id: 'recruiting',  label: '📋 Recruiting',   desc: 'Commitments, visits, offers' },
+    { id: 'championship',label: '🏆 Championship', desc: 'Trophy screens, bowl/CFP results' },
   ]
 
   const loadFiles = useCallback(async () => {
@@ -722,12 +817,12 @@ export default function App() {
           ? <div style={{ color: C.muted, textAlign: 'center', paddingTop: 80, fontFamily: "'Oswald', sans-serif", letterSpacing: 2 }}>LOADING DYNASTY DATA...</div>
           : (
             <>
-              {tab === 'Dashboard'    && <Dashboard   {...data} />}
-              {tab === 'Standings'    && <Standings   teams={data.teams} />}
-              {tab === 'Scores'       && <Scores      games={data.games} />}
-              {tab === 'Player Stats' && <PlayerStats players={data.players} />}
-              {tab === 'Media Center' && <MediaCenter teams={data.teams} games={data.games} players={data.players} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin) }} />}
-              {tab === 'Drive Sync'   && <DriveSync   onRefresh={fetchData} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} />}
+              {tab === 'Standings' && <Standings  teams={data.teams} />}
+              {tab === 'Season'    && <Season     games={data.games} teams={data.teams} />}
+              {tab === 'Stats'     && <PlayerStats players={data.players} />}
+              {tab === 'Media'     && <MediaCenter teams={data.teams} games={data.games} players={data.players} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin) }} />}
+              {tab === 'Sync'      && <DriveSync  onRefresh={fetchData} />}
             </>
           )}
       </div>

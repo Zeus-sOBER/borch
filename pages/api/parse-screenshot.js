@@ -75,7 +75,7 @@ async function fetchDriveImageAsBase64(fileId) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { fileId, fileName, mimeType: inputMimeType } = req.body;
+  const { fileId, fileName, mimeType: inputMimeType, typeHint } = req.body;
 
   if (!fileId) return res.status(400).json({ error: 'fileId is required' });
 
@@ -99,14 +99,24 @@ export default async function handler(req, res) {
       inputMimeType === 'application/vnd.google-apps.document' ||
       fileName?.toLowerCase().endsWith('.gdoc');
 
+    const isScheduleImport = typeHint === 'schedule';
+
     let parsedResult;
 
-    if (isGoogleDoc) {
-      // ── GOOGLE DOC PATH ────────────────────────────────────────────────────
+    if (isScheduleImport && isGoogleDoc) {
+      // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
+      const docText = await fetchGoogleDocText(fileId);
+      parsedResult = await parseScheduleDoc(docText, coaches, humanTeams);
+    } else if (isScheduleImport) {
+      // ── SCHEDULE SCREENSHOT → upcoming matchups from game screen ──────────
+      const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
+      parsedResult = await parseScheduleImage(base64, mimeType, coaches, humanTeams);
+    } else if (isGoogleDoc) {
+      // ── GOOGLE DOC (general) → scores, notes, stats, etc. ────────────────
       const docText = await fetchGoogleDocText(fileId);
       parsedResult = await parseGoogleDoc(docText, coaches, humanTeams, latestWeek);
     } else {
-      // ── IMAGE PATH ─────────────────────────────────────────────────────────
+      // ── IMAGE PATH ────────────────────────────────────────────────────────
       const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
       parsedResult = await parseImage(base64, mimeType, coaches, humanTeams, latestWeek);
     }
@@ -146,6 +156,112 @@ export default async function handler(req, res) {
 
     res.status(500).json({ error: 'Failed to parse file', details: error.message });
   }
+}
+
+// ─── Parse a Schedule Doc (Google Doc or Sheet) ──────────────────────────────
+async function parseScheduleDoc(docText, coaches, humanTeams) {
+  const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
+
+  const prompt = `You are importing a college football dynasty league SEASON SCHEDULE from a document.
+
+HUMAN COACHES IN THIS LEAGUE: ${coachList}
+HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
+
+The document contains the full season schedule — matchups for every week, possibly across the whole season.
+Extract ALL matchups. These are UPCOMING games (no scores yet). Ignore any games that already have final scores (those should be scanned separately with Auto-Detect).
+
+DOCUMENT CONTENT:
+---
+${docText.substring(0, 10000)}
+---
+
+Return ONLY a JSON object (no markdown, no explanation):
+{
+  "type": "schedule",
+  "summary": "Imported schedule: N weeks, N total games",
+  "games": [
+    {
+      "home_team": "Team Name",
+      "away_team": "Team Name",
+      "week": 1,
+      "is_final": false,
+      "home_score": null,
+      "away_score": null,
+      "game_type": "regular"
+    }
+  ]
+}
+
+Rules:
+- Set "is_final": false for ALL games (these are upcoming matchups)
+- Set "home_score": null and "away_score": null for ALL games
+- Set "game_type" to one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
+- Week 14 games are typically "conference_championship"
+- Weeks 15-18 are playoff/bowl games
+- Include ALL matchups you find, not just human-team games`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const text = response.content[0].text.replace(/```json|```/g, '').trim();
+  const parsed = JSON.parse(text);
+  parsed.source = 'schedule_doc';
+  return parsed;
+}
+
+// ─── Parse a Schedule Screenshot ─────────────────────────────────────────────
+async function parseScheduleImage(base64, mimeType, coaches, humanTeams) {
+  const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
+
+  const prompt = `You are reading a screenshot of a college football dynasty schedule screen.
+
+HUMAN COACHES IN THIS LEAGUE: ${coachList}
+HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
+
+Extract all visible matchups from this schedule screen. These are UPCOMING games.
+Only extract matchups that do NOT have final scores yet.
+
+Return ONLY a JSON object (no markdown, no explanation):
+{
+  "type": "schedule",
+  "summary": "Imported schedule from screenshot: N games across N weeks",
+  "games": [
+    {
+      "home_team": "Team Name",
+      "away_team": "Team Name",
+      "week": 1,
+      "is_final": false,
+      "home_score": null,
+      "away_score": null,
+      "game_type": "regular"
+    }
+  ]
+}
+
+Rules:
+- Set "is_final": false for ALL games
+- Set "home_score": null and "away_score": null
+- Determine "game_type" from context (conference title game, bowl name, etc.)`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  });
+
+  const text = response.content[0].text.replace(/```json|```/g, '').trim();
+  const parsed = JSON.parse(text);
+  parsed.source = 'schedule_image';
+  return parsed;
 }
 
 // ─── Parse a Google Doc ───────────────────────────────────────────────────────
@@ -300,7 +416,8 @@ async function saveToSupabase(data, coaches, humanTeams) {
         home_score: game.home_score ?? null,
         away_score: game.away_score ?? null,
         week: game.week ?? data.week ?? null,
-        is_final: game.is_final ?? true,
+        // Explicitly respect is_final from parsed data; only default to true for image scans (not schedule imports)
+        is_final: game.is_final !== undefined && game.is_final !== null ? game.is_final : (data.source !== 'schedule_doc' && data.source !== 'schedule_image'),
         game_type: game.game_type ?? 'regular'
       }, { onConflict: 'home_team,away_team,week' });
       if (!error) saved.games++;
