@@ -1,3 +1,5 @@
+import { logNarrativeEvent, analyzeGame } from '../../lib/narrative';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -131,6 +133,9 @@ Return this exact structure (use null for fields you cannot determine):
       }
     }
 
+    // ── Log to Narrative Hub ──────────────────────────────────────────────
+    await logStreamToNarrative(analysis, channelName, currentGameContext, season, now, db);
+
     return res.status(200).json({
       live: true,
       streamTitle: streamData.title,
@@ -164,6 +169,104 @@ async function getStreamData(channelName, token) {
   })
   const d = await r.json()
   return d.data?.[0] || null
+}
+
+// ─── Log Stream Data to Narrative Hub ────────────────────────────────────────
+async function logStreamToNarrative(analysis, channelName, gameContext, season, now, db) {
+  try {
+    // Pull coaches to do coach lookups
+    const { data: coaches } = await db.from('coaches').select('name, team');
+    const { data: standings } = await db.from('teams').select('team_name, wins, losses').order('wins', { ascending: false });
+
+    const homeTeam = analysis.game?.homeTeam;
+    const awayTeam = analysis.game?.awayTeam;
+    const week = gameContext?.week ?? null;
+
+    // Log final game result
+    if (analysis.gameStatus === 'final' && analysis.finalResult?.winner) {
+      const fakeGame = {
+        home_team:  homeTeam,
+        away_team:  awayTeam,
+        home_score: analysis.game?.homeScore,
+        away_score: analysis.game?.awayScore,
+        week,
+        game_type: 'regular',
+      };
+
+      const { tags, weight, featuredCoach, opposingCoach, winner, loser, winnerScore, loserScore }
+        = analyzeGame(fakeGame, coaches || [], standings || []);
+
+      if (analysis.finalResult.isUpset) tags.push('upset');
+
+      await logNarrativeEvent({
+        event_type:       'game',
+        season,
+        week,
+        featured_coach:   featuredCoach,
+        featured_team:    winner,
+        opposing_coach:   opposingCoach,
+        opposing_team:    loser,
+        title:            `${winner} def. ${loser} ${winnerScore}-${loserScore}`,
+        summary:          `${winner} defeated ${loser} ${winnerScore}-${loserScore}${analysis.finalResult.wasOT ? ' (OT)' : ''} — via stream @${channelName}`,
+        narrative_weight: weight,
+        momentum_tags:    tags,
+        is_season_highlight: weight >= 4,
+        source_table:     'stream_events',
+        raw_data:         { channelName, gameStatus: analysis.gameStatus, finalResult: analysis.finalResult },
+      });
+    }
+
+    // Log each big moment
+    if (analysis.bigMoments?.length) {
+      for (const moment of analysis.bigMoments) {
+        const isMajor = ['championship', 'upset', 'record'].includes(moment.type);
+        const coach = coaches?.find(c => c.team?.toLowerCase() === moment.team?.toLowerCase());
+
+        const momentTags = [moment.type];
+        if (isMajor) momentTags.push('stream_highlight');
+
+        await logNarrativeEvent({
+          event_type:       'moment',
+          season,
+          week,
+          featured_coach:   coach?.name ?? null,
+          featured_team:    moment.team ?? null,
+          title:            `${moment.type.toUpperCase()}: ${moment.description}`,
+          summary:          `${moment.description}${moment.player ? ` — ${moment.player}` : ''}${homeTeam && awayTeam ? ` (${homeTeam} vs ${awayTeam})` : ''}`,
+          narrative_weight: isMajor ? 4 : 2,
+          momentum_tags:    momentTags,
+          is_season_highlight: isMajor,
+          source_table:     'big_moments',
+          raw_data:         moment,
+        });
+      }
+    }
+
+    // Log notable recruiting events
+    if (analysis.recruitingEvents?.length) {
+      for (const ev of analysis.recruitingEvents) {
+        if ((ev.stars ?? 0) < 4 && ev.type !== 'commitment') continue;
+        const coach = coaches?.find(c => c.team?.toLowerCase() === ev.committingTo?.toLowerCase());
+
+        await logNarrativeEvent({
+          event_type:       'recruiting',
+          season,
+          week,
+          featured_coach:   coach?.name ?? null,
+          featured_team:    ev.committingTo ?? null,
+          title:            `${ev.stars ?? '?'}⭐ ${ev.pos ?? ''} ${ev.playerName} — ${ev.type}`,
+          summary:          `${ev.playerName} (${ev.stars ?? '?'}★ ${ev.pos ?? 'ATH'}) ${ev.type === 'commitment' ? 'commits to' : ev.type} ${ev.committingTo ?? 'unknown'}`,
+          narrative_weight: (ev.stars ?? 0) >= 5 ? 4 : 3,
+          momentum_tags:    [ev.type, ev.stars >= 5 ? '5_star' : null].filter(Boolean),
+          source_table:     'recruiting_events',
+          raw_data:         ev,
+        });
+      }
+    }
+
+  } catch (err) {
+    console.error('[narrative] watch-stream log error:', err.message);
+  }
 }
 
 function parseStatString(pos, statType, value) {

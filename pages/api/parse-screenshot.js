@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
+import { logNarrativeEvent, analyzeGame } from '../../lib/narrative';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const supabase = createClient(
@@ -112,6 +113,9 @@ export default async function handler(req, res) {
 
     // Save results to Supabase
     const saveResult = await saveToSupabase(parsedResult, coaches, humanTeams);
+
+    // ── Log to Narrative Hub ────────────────────────────────────────────────
+    await logParsedResultToNarrative(parsedResult, coaches, humanTeams);
 
     // Log the scan
     await supabase.from('scan_log').insert({
@@ -368,4 +372,99 @@ async function saveToSupabase(data, coaches, humanTeams) {
   }
 
   return saved;
+}
+
+// ─── Log Parsed Results to Narrative Hub ─────────────────────────────────────
+async function logParsedResultToNarrative(data, coaches, humanTeams) {
+  try {
+    // Pull standings to help detect upsets
+    const { createClient: sc } = await import('@supabase/supabase-js');
+    const db = sc(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { data: standings } = await db.from('teams').select('team_name, wins, losses').order('wins', { ascending: false });
+
+    // Log each final game result
+    if (data.games?.length > 0) {
+      for (const game of data.games) {
+        if (!game.home_team || !game.away_team || !game.is_final) continue;
+
+        // Only log games involving at least one human-coached team
+        const hasHumanTeam = humanTeams.some(ht =>
+          ht.toLowerCase() === game.home_team?.toLowerCase() ||
+          ht.toLowerCase() === game.away_team?.toLowerCase()
+        );
+        if (!hasHumanTeam) continue;
+
+        const { tags, weight, featuredCoach, opposingCoach, winner, loser, winnerScore, loserScore }
+          = analyzeGame(game, coaches, standings || []);
+
+        const winnerStr = winnerScore !== undefined ? `${winnerScore}` : '?';
+        const loserStr  = loserScore  !== undefined ? `${loserScore}` : '?';
+
+        await logNarrativeEvent({
+          event_type:       'game',
+          season:           data.season ?? 1,
+          week:             game.week ?? data.week ?? null,
+          featured_coach:   featuredCoach,
+          featured_team:    winner,
+          opposing_coach:   opposingCoach,
+          opposing_team:    loser,
+          title:            `${winner} def. ${loser} ${winnerStr}-${loserStr}`,
+          summary:          `Week ${game.week ?? data.week ?? '?'}: ${winner} defeated ${loser} ${winnerStr}-${loserStr}${game.game_type && game.game_type !== 'regular' ? ` (${game.game_type.replace(/_/g, ' ')})` : ''}`,
+          narrative_weight: weight,
+          momentum_tags:    tags,
+          is_season_highlight: weight >= 4,
+          source_table:     'games',
+          raw_data:         game,
+        });
+      }
+    }
+
+    // Log championship
+    if (data.championship) {
+      const champ = data.championship;
+      const coach = coaches.find(c => c.team?.toLowerCase() === champ.team_name?.toLowerCase());
+      await logNarrativeEvent({
+        event_type:          'game',
+        season:              champ.season ?? data.season ?? 1,
+        featured_coach:      champ.coach_name || coach?.name || null,
+        featured_team:       champ.team_name,
+        title:               `${champ.team_name} wins ${champ.championship_type || 'Championship'}`,
+        summary:             `${champ.team_name} (Coach: ${champ.coach_name || coach?.name || 'unknown'}) wins the ${champ.championship_type || 'championship'} with a record of ${champ.record || '?'}`,
+        narrative_weight:    champ.championship_type === 'national' ? 5 : 4,
+        momentum_tags:       ['championship', champ.championship_type === 'national' ? 'national_title' : 'conference_title'],
+        is_season_highlight: true,
+        source_table:        'championships',
+        raw_data:            champ,
+      });
+    }
+
+    // Log recruiting commitments (only 4+ star or notable events)
+    if (data.recruiting?.length > 0) {
+      for (const recruit of data.recruiting) {
+        if (!recruit.player_name) continue;
+        if ((recruit.stars ?? 0) < 4 && recruit.event_type !== 'commitment') continue;
+
+        const coach = coaches.find(c =>
+          c.team?.toLowerCase() === recruit.school?.toLowerCase()
+        );
+
+        await logNarrativeEvent({
+          event_type:       'recruiting',
+          season:           data.season ?? 1,
+          featured_coach:   coach?.name ?? null,
+          featured_team:    recruit.school ?? null,
+          title:            `${recruit.stars ?? '?'}⭐ ${recruit.position ?? ''} ${recruit.player_name} — ${recruit.event_type}`,
+          summary:          `${recruit.player_name} (${recruit.stars ?? '?'}★ ${recruit.position ?? 'ATH'}) ${recruit.event_type === 'commitment' ? 'commits to' : recruit.event_type} ${recruit.school ?? 'unknown'}`,
+          narrative_weight: (recruit.stars ?? 0) >= 5 ? 4 : 3,
+          momentum_tags:    [recruit.event_type, recruit.stars >= 5 ? '5_star' : null].filter(Boolean),
+          source_table:     'recruiting_events',
+          raw_data:         recruit,
+        });
+      }
+    }
+
+  } catch (err) {
+    // Narrative logging is non-critical — never crash the main flow
+    console.error('[narrative] parse-screenshot log error:', err.message);
+  }
 }
