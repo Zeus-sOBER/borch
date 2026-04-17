@@ -310,6 +310,21 @@ function MediaCenter({ teams, games, players, commPin, onPinSet }) {
   const [article, setArticle] = useState(null)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
+  const [pastArticles, setPastArticles]     = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [viewingArticle, setViewingArticle] = useState(null)
+
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true)
+    try {
+      const res  = await fetch('/api/articles?limit=30')
+      const data = await res.json()
+      setPastArticles(data.articles || [])
+    } catch (e) { console.error(e) }
+    setLoadingHistory(false)
+  }, [])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   const TYPES = [
     { id: 'power-rankings',    label: 'Power Rankings',    icon: '📊' },
@@ -319,7 +334,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet }) {
   ]
 
   const generate = async () => {
-    setLoading(true); setArticle(null)
+    setLoading(true); setArticle(null); setViewingArticle(null)
     try {
       const res = await fetch('/api/generate-article', {
         method: 'POST',
@@ -331,6 +346,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet }) {
         setArticle('❌ ' + data.error)
       } else {
         setArticle(data.article)
+        loadHistory()
       }
     } catch (e) { setArticle('Error generating article.') }
     setLoading(false)
@@ -399,7 +415,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet }) {
       }}>{loading ? '⏳ Generating...' : !commPin ? '🔒 Login to Generate' : '⚡ Generate Article'}</button>
 
       {article && (
-        <Card>
+        <Card style={{ marginBottom: 24 }}>
           {article.split('\n').map((line, i) => {
             if (!line.trim()) return <div key={i} style={{ height: 8 }} />
             const clean = line.replace(/^#+\s*/, '')
@@ -410,6 +426,71 @@ function MediaCenter({ teams, games, players, commPin, onPinSet }) {
           })}
         </Card>
       )}
+
+      {/* ── Past Articles Archive ─────────────────────────────── */}
+      <div style={{ marginTop: 40 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+            📰 Article Archive
+          </div>
+          <button onClick={loadHistory} disabled={loadingHistory} style={{ background: C.card, color: loadingHistory ? C.muted : C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12 }}>
+            {loadingHistory ? '⏳' : '🔄 Refresh'}
+          </button>
+        </div>
+
+        {pastArticles.length === 0 && !loadingHistory && (
+          <Card><p style={{ color: C.muted, margin: 0, fontSize: 13 }}>No articles generated yet. Generate your first article above.</p></Card>
+        )}
+
+        {/* Viewing a past article */}
+        {viewingArticle && (
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <Badge color={C.blue}>{viewingArticle.article_type?.replace(/-/g, ' ')}</Badge>
+                {viewingArticle.week && <Badge color={C.muted} style={{ marginLeft: 6 }}>Week {viewingArticle.week}</Badge>}
+              </div>
+              <button onClick={() => setViewingArticle(null)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, color: C.muted, cursor: 'pointer', padding: '4px 10px', fontSize: 12 }}>✕ Close</button>
+            </div>
+            {viewingArticle.content.split('\n').map((line, i) => {
+              if (!line.trim()) return <div key={i} style={{ height: 8 }} />
+              const clean = line.replace(/^#+\s*/, '')
+              const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
+              return isHead
+                ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? 24 : 15, color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 12, marginTop: i > 0 ? 18 : 0 }}>{clean}</div>
+                : <p key={i} style={{ color: C.text, fontSize: 14, margin: '0 0 10px', lineHeight: 1.8 }}>{line}</p>
+            })}
+          </Card>
+        )}
+
+        {/* Article list */}
+        <div style={{ display: 'grid', gap: 8 }}>
+          {pastArticles.map(a => {
+            const typeLabel = (a.article_type || 'article').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            const isViewing = viewingArticle?.id === a.id
+            return (
+              <Card
+                key={a.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', borderColor: isViewing ? C.accent + '66' : C.border, transition: 'border-color 0.15s' }}
+                onClick={() => setViewingArticle(isViewing ? null : a)}
+              >
+                <div style={{ fontSize: 24, flexShrink: 0 }}>📄</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {a.title || typeLabel}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Badge color={C.blue}>{typeLabel}</Badge>
+                    {a.week && <Badge color={C.muted}>Wk {a.week}</Badge>}
+                    <span style={{ color: C.muted, fontSize: 11 }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                </div>
+                <div style={{ color: isViewing ? C.accent : C.muted, fontSize: 18, flexShrink: 0 }}>{isViewing ? '▲' : '▼'}</div>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
