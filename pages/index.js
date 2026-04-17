@@ -397,6 +397,170 @@ function Standings({ teams, isMobile }) {
   )
 }
 
+// ── Share Card overlay ────────────────────────────────────────
+function ShareCard({ game, onClose }) {
+  if (!game) return null
+  const homeWon = game.home_score > game.away_score
+  const awayWon = game.away_score > game.home_score
+  const gameLabel = game.game_type && game.game_type !== 'regular'
+    ? game.game_type.replace(/_/g, ' ').toUpperCase()
+    : null
+  const isFinal = game.is_final || game.status === 'Final'
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      {/* Hint */}
+      <div style={{ color: C.muted, fontSize: 12, marginBottom: 16, letterSpacing: 1, fontFamily: "'Oswald', sans-serif", textTransform: 'uppercase' }}>
+        📸 Screenshot to share · Tap anywhere to close
+      </div>
+
+      {/* The shareable card — designed for portrait phone screenshots */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'linear-gradient(160deg, #17171d 0%, #0d0d12 100%)',
+          border: `2px solid ${C.accent}55`,
+          borderRadius: 20,
+          width: '100%', maxWidth: 360,
+          padding: '32px 28px',
+          boxShadow: `0 0 60px ${C.accent}22, 0 20px 60px rgba(0,0,0,0.8)`,
+          position: 'relative', overflow: 'hidden',
+        }}
+      >
+        {/* Background texture lines */}
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.04,
+          background: 'repeating-linear-gradient(45deg, #c9a84c 0px, #c9a84c 1px, transparent 1px, transparent 12px)',
+          borderRadius: 20,
+        }} />
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 28, position: 'relative' }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>
+            DYNASTY UNIVERSE · {gameLabel || `WEEK ${game.week || '—'}`}
+          </div>
+          {gameLabel && (
+            <div style={{
+              display: 'inline-block',
+              background: C.accent + '22', color: C.accent,
+              border: `1px solid ${C.accent}55`,
+              borderRadius: 4, padding: '3px 12px',
+              fontSize: 11, fontFamily: "'Oswald', sans-serif",
+              letterSpacing: 2, textTransform: 'uppercase',
+            }}>{gameLabel}</div>
+          )}
+        </div>
+
+        {/* Winner team */}
+        <div style={{
+          background: homeWon ? C.accent + '15' : awayWon ? C.accent + '15' : C.surface,
+          borderRadius: 12, padding: '20px 20px',
+          marginBottom: 4,
+          border: `1px solid ${(homeWon || awayWon) ? C.accent + '44' : C.border}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: "'Oswald', sans-serif",
+                fontSize: homeWon ? 26 : 22,
+                fontWeight: 700,
+                color: homeWon ? C.text : C.muted,
+                lineHeight: 1.1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{game.home_team}</div>
+              <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginTop: 3 }}>
+                {homeWon ? '🏆 Winner · Home' : 'Home'}
+              </div>
+            </div>
+            {isFinal && (
+              <div style={{
+                fontFamily: "'Oswald', sans-serif",
+                fontSize: homeWon ? 52 : 40,
+                color: homeWon ? C.accent : C.muted,
+                lineHeight: 1, flexShrink: 0, marginLeft: 12,
+              }}>{game.home_score}</div>
+            )}
+          </div>
+        </div>
+
+        {/* VS divider */}
+        <div style={{ textAlign: 'center', padding: '8px 0', position: 'relative' }}>
+          <div style={{ position: 'absolute', left: 20, right: 20, top: '50%', height: 1, background: C.border }} />
+          <span style={{
+            position: 'relative', background: '#0d0d12',
+            padding: '0 12px',
+            fontFamily: "'Oswald', sans-serif", fontSize: 12,
+            color: C.muted, letterSpacing: 3,
+          }}>
+            {isFinal ? 'FINAL' : 'VS'}
+          </span>
+        </div>
+
+        {/* Away team */}
+        <div style={{
+          background: awayWon ? C.accent + '15' : C.surface,
+          borderRadius: 12, padding: '20px 20px',
+          marginTop: 4,
+          border: `1px solid ${awayWon ? C.accent + '44' : C.border}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: "'Oswald', sans-serif",
+                fontSize: awayWon ? 26 : 22,
+                fontWeight: 700,
+                color: awayWon ? C.text : C.muted,
+                lineHeight: 1.1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{game.away_team}</div>
+              <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginTop: 3 }}>
+                {awayWon ? '🏆 Winner · Away' : 'Away'}
+              </div>
+            </div>
+            {isFinal && (
+              <div style={{
+                fontFamily: "'Oswald', sans-serif",
+                fontSize: awayWon ? 52 : 40,
+                color: awayWon ? C.accent : C.muted,
+                lineHeight: 1, flexShrink: 0, marginLeft: 12,
+              }}>{game.away_score}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer branding */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: 24, paddingTop: 16,
+          borderTop: `1px solid ${C.border}`,
+        }}>
+          <div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, fontWeight: 700 }}>DYNASTY</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: 4 }}>UNIVERSE</div>
+          </div>
+          {game.week && (
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1 }}>
+              WEEK {game.week}
+            </div>
+          )}
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.subtle, letterSpacing: 1 }}>
+            CFB 26
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Season ─────────────────────────────────────────────────────
 const WEEK_SHORT = { 14: 'Conf Champ', 15: 'CFP R1', 16: 'CFP QF', 17: 'CFP SF', 18: 'Natl Champ' }
 const SEASON_PHASES = [
@@ -418,6 +582,7 @@ function Season({ games, teams, isMobile }) {
   const finalGames = games.filter(g => g.is_final || g.status === 'Final')
   const currentWeek = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(Boolean)) : 1
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
+  const [sharingGame, setSharingGame] = useState(null)
   useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
 
   const weeksWithGames = new Set(games.map(g => g.week).filter(Boolean))
@@ -481,8 +646,23 @@ function Season({ games, teams, isMobile }) {
             return (
               <Card key={g.id} style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Badge color={isFinal ? C.muted : C.blue}>{isFinal ? 'Final' : 'Scheduled'}</Badge>
-                  {gameLabel && <Badge color={C.accent}>{gameLabel}</Badge>}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Badge color={isFinal ? C.muted : C.blue}>{isFinal ? 'Final' : 'Scheduled'}</Badge>
+                    {gameLabel && <Badge color={C.accent}>{gameLabel}</Badge>}
+                  </div>
+                  {isFinal && (
+                    <button
+                      onClick={() => setSharingGame(g)}
+                      title="Share result"
+                      style={{
+                        background: 'transparent', border: `1px solid ${C.border}`,
+                        borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                        color: C.muted, fontSize: 13,
+                        fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5,
+                        transition: 'all 0.15s',
+                      }}
+                    >📤 Share</button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isFinal ? 8 : 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -528,6 +708,9 @@ function Season({ games, teams, isMobile }) {
           )
         })}
       </div>
+
+      {/* Share card overlay */}
+      {sharingGame && <ShareCard game={sharingGame} onClose={() => setSharingGame(null)} />}
     </div>
   )
 }

@@ -19,7 +19,8 @@ const SUPPORTED_IMAGE_TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif'
 ];
 const SUPPORTED_DOC_TYPES = [
-  'application/vnd.google-apps.document'
+  'application/vnd.google-apps.document',
+  'application/vnd.google-apps.spreadsheet',
 ];
 
 export default async function handler(req, res) {

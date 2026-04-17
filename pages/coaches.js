@@ -111,19 +111,33 @@ function winPct(w, l) {
 function CoachCard({ coach, onSelect, isCommissioner }) {
   const achievements = coach.achievements || []
   const latestSeason = (coach.season_records || []).slice(-1)[0]
+  const accentColor  = coach.team_color || C.accent
 
   return (
-    <Card onClick={() => onSelect(coach)} style={{ position: 'relative' }}>
+    <Card onClick={() => onSelect(coach)} style={{ position: 'relative', borderColor: coach.team_color ? coach.team_color + '55' : C.border }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
             {coach.is_commissioner && <Badge color={C.accent}>Commissioner</Badge>}
             {!coach.is_active && <Badge color={C.red}>Inactive</Badge>}
           </div>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, fontWeight: 700, color: C.text, lineHeight: 1 }}>{coach.name}</div>
-          <div style={{ color: C.accent, fontSize: 13, marginTop: 4 }}>{coach.team || 'No team assigned'}</div>
-          {coach.username && <div style={{ color: C.muted, fontSize: 12 }}>@{coach.username}</div>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {coach.mascot_emoji && (
+              <span style={{
+                fontSize: 32, lineHeight: 1,
+                background: accentColor + '22',
+                border: `1px solid ${accentColor}44`,
+                borderRadius: 8, padding: '4px 8px',
+                flexShrink: 0,
+              }}>{coach.mascot_emoji}</span>
+            )}
+            <div>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, fontWeight: 700, color: C.text, lineHeight: 1 }}>{coach.name}</div>
+              <div style={{ color: accentColor, fontSize: 13, marginTop: 4 }}>{coach.team || 'No team assigned'}</div>
+              {coach.username && <div style={{ color: C.muted, fontSize: 12 }}>@{coach.username}</div>}
+            </div>
+          </div>
         </div>
         {/* Overall record */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -133,7 +147,7 @@ function CoachCard({ coach, onSelect, isCommissioner }) {
             <span style={{ color: C.red }}>{coach.overall_losses}</span>
           </div>
           <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 }}>All-Time</div>
-          <div style={{ color: C.accent, fontSize: 13, marginTop: 2 }}>{winPct(coach.overall_wins, coach.overall_losses)}</div>
+          <div style={{ color: accentColor, fontSize: 13, marginTop: 2 }}>{winPct(coach.overall_wins, coach.overall_losses)}</div>
         </div>
       </div>
 
@@ -398,14 +412,25 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, paddingRight: 40 }}>
-          <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-              {form.is_commissioner && <Badge color={C.accent}>Commissioner</Badge>}
-              {!form.is_active && <Badge color={C.red}>Inactive</Badge>}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            {form.mascot_emoji && (
+              <div style={{
+                fontSize: 48, lineHeight: 1,
+                background: (form.team_color || C.accent) + '22',
+                border: `1px solid ${(form.team_color || C.accent)}44`,
+                borderRadius: 12, padding: '10px 14px',
+                flexShrink: 0,
+              }}>{form.mascot_emoji}</div>
+            )}
+            <div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                {form.is_commissioner && <Badge color={C.accent}>Commissioner</Badge>}
+                {!form.is_active && <Badge color={C.red}>Inactive</Badge>}
+              </div>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, fontWeight: 700, color: C.text }}>{form.name}</div>
+              <div style={{ color: form.team_color || C.accent, fontSize: 15 }}>{form.team}</div>
+              {form.username && <div style={{ color: C.muted, fontSize: 13 }}>@{form.username}</div>}
             </div>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, fontWeight: 700, color: C.text }}>{form.name}</div>
-            <div style={{ color: C.accent, fontSize: 15 }}>{form.team}</div>
-            {form.username && <div style={{ color: C.muted, fontSize: 13 }}>@{form.username}</div>}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 36, color: C.text, lineHeight: 1 }}>
@@ -517,6 +542,54 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }
                   <option value="">Select style...</option>
                   {COACHING_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </div>
+            </div>
+
+            {/* Mascot + Team Color */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Mascot Emoji</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={form.mascot_emoji || ''}
+                    onChange={e => setForm(f => ({ ...f, mascot_emoji: e.target.value }))}
+                    placeholder="🐊"
+                    maxLength={4}
+                    style={{
+                      width: 60, background: C.surface, border: `1px solid ${C.border}`,
+                      borderRadius: 6, padding: '10px 8px', color: C.text,
+                      fontSize: 22, textAlign: 'center', outline: 'none',
+                    }}
+                  />
+                  <div style={{ color: C.muted, fontSize: 12 }}>Paste any emoji to represent your team mascot</div>
+                </div>
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Team Color</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="color"
+                    value={form.team_color || '#c9a84c'}
+                    onChange={e => setForm(f => ({ ...f, team_color: e.target.value }))}
+                    style={{
+                      width: 44, height: 42, padding: 2, cursor: 'pointer',
+                      background: C.surface, border: `1px solid ${C.border}`,
+                      borderRadius: 6, outline: 'none',
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={form.team_color || ''}
+                    onChange={e => setForm(f => ({ ...f, team_color: e.target.value }))}
+                    placeholder="#003087"
+                    style={{
+                      flex: 1, background: C.surface, border: `1px solid ${C.border}`,
+                      borderRadius: 6, padding: '10px 12px', color: C.text,
+                      fontSize: 13, outline: 'none', fontFamily: 'monospace',
+                    }}
+                  />
+                </div>
               </div>
             </div>
 

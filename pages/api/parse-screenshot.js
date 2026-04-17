@@ -54,6 +54,19 @@ async function fetchGoogleDocText(fileId) {
   return res.data;
 }
 
+// ─── Fetch Google Sheet as CSV text ──────────────────────────────────────────
+async function fetchGoogleSheetAsCsv(fileId) {
+  const auth = getGoogleAuth();
+  const drive = google.drive({ version: 'v3', auth });
+
+  // Export the first sheet as CSV
+  const res = await drive.files.export(
+    { fileId, mimeType: 'text/csv' },
+    { responseType: 'text' }
+  );
+  return res.data;
+}
+
 // ─── Fetch image from Drive as base64 ────────────────────────────────────────
 async function fetchDriveImageAsBase64(fileId) {
   const auth = getGoogleAuth();
@@ -95,15 +108,18 @@ export default async function handler(req, res) {
       .limit(1);
     const latestWeek = recentGames?.[0]?.week || 1;
 
-    const isGoogleDoc =
-      inputMimeType === 'application/vnd.google-apps.document' ||
-      fileName?.toLowerCase().endsWith('.gdoc');
+    const isGoogleDoc   = inputMimeType === 'application/vnd.google-apps.document'  || fileName?.toLowerCase().endsWith('.gdoc');
+    const isGoogleSheet = inputMimeType === 'application/vnd.google-apps.spreadsheet' || fileName?.toLowerCase().endsWith('.gsheet');
 
     const isScheduleImport = typeHint === 'schedule';
 
     let parsedResult;
 
-    if (isScheduleImport && isGoogleDoc) {
+    if (isGoogleSheet) {
+      // ── GOOGLE SHEET → always treated as schedule import ─────────────────
+      const sheetCsv = await fetchGoogleSheetAsCsv(fileId);
+      parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams);
+    } else if (isScheduleImport && isGoogleDoc) {
       // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
       const docText = await fetchGoogleDocText(fileId);
       parsedResult = await parseScheduleDoc(docText, coaches, humanTeams);
