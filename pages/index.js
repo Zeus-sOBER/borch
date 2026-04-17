@@ -135,7 +135,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries 
   // Only show #1 ranked if we have actual game data to rank by
   const rankedTeams = [...teams].sort((a, b) => b.wins - a.wins || (b.pts - b.pts_against) - (a.pts - a.pts_against))
   const topTeam     = finalGames.length > 0 ? rankedTeams[0] : null
-  const weeks       = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(Boolean)) : 0
+  const weeks       = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(w => w != null)) : 0
   const topPasser   = players.find(p => p.pos === 'QB')
   const topRusher   = players.find(p => p.pos === 'RB')
   const topReceiver = players.find(p => p.pos === 'WR')
@@ -574,16 +574,17 @@ function ShareCard({ game, onClose }) {
 }
 
 // ── Season ─────────────────────────────────────────────────────
-const WEEK_SHORT = { 14: 'Conf Champ', 15: 'CFP R1', 16: 'CFP QF', 17: 'CFP SF', 18: 'Natl Champ' }
+const WEEK_SHORT = { 0: 'Wk 0', 14: 'Conf Champ', 15: 'CFP R1', 16: 'CFP QF', 17: 'CFP SF', 18: 'Natl Champ' }
 const SEASON_PHASES = [
-  { range: [1,  4],  label: 'EARLY SEASON',         sub: 'Non-conference play · Records still forming' },
-  { range: [5,  9],  label: 'CONFERENCE PLAY',       sub: 'Division races taking shape · Every loss stings' },
-  { range: [10, 13], label: 'LATE SEASON',           sub: 'Rivalry week incoming · CFP positioning is everything' },
-  { range: [14, 14], label: 'CONF. CHAMPIONSHIPS',   sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
-  { range: [15, 15], label: 'CFP FIRST ROUND',       sub: '12-team playoff begins · Road to the national title starts here' },
-  { range: [16, 16], label: 'CFP QUARTERFINALS',     sub: '8 teams remain · One loss and your season is over' },
-  { range: [17, 17], label: 'CFP SEMIFINALS',        sub: 'Final four · Two spots in the National Championship' },
-  { range: [18, 99], label: 'NATIONAL CHAMPIONSHIP', sub: 'One game · One champion · Dynasty legacy on the line' },
+  { range: [0,  0],  label: 'WEEK 0 — KICKOFF',      sub: 'Early openers · Non-conference · Dynasty begins here' },
+  { range: [1,  4],  label: 'EARLY SEASON',           sub: 'Non-conference play · Records still forming' },
+  { range: [5,  9],  label: 'CONFERENCE PLAY',        sub: 'Division races taking shape · Every loss stings' },
+  { range: [10, 13], label: 'LATE SEASON',            sub: 'Rivalry week incoming · CFP positioning is everything' },
+  { range: [14, 14], label: 'CONF. CHAMPIONSHIPS',    sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
+  { range: [15, 15], label: 'CFP FIRST ROUND',        sub: '12-team playoff begins · Road to the national title starts here' },
+  { range: [16, 16], label: 'CFP QUARTERFINALS',      sub: '8 teams remain · One loss and your season is over' },
+  { range: [17, 17], label: 'CFP SEMIFINALS',         sub: 'Final four · Two spots in the National Championship' },
+  { range: [18, 99], label: 'NATIONAL CHAMPIONSHIP',  sub: 'One game · One champion · Dynasty legacy on the line' },
 ]
 function getPhase(w) {
   return SEASON_PHASES.find(p => w >= p.range[0] && w <= p.range[1]) || { label: `WEEK ${w}`, sub: '' }
@@ -592,13 +593,13 @@ function getPhase(w) {
 function Season({ games, teams, isMobile }) {
   const humanNames = new Set(teams.map(t => (t.name || t.team_name || '').toLowerCase()))
   const finalGames = games.filter(g => g.is_final || g.status === 'Final')
-  const currentWeek = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(Boolean)) : 1
+  const currentWeek = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(w => w != null)) : 0
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
   const [sharingGame, setSharingGame] = useState(null)
   useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
 
-  const weeksWithGames = new Set(games.map(g => g.week).filter(Boolean))
-  const allWeeks = Array.from({ length: 18 }, (_, i) => i + 1)
+  const weeksWithGames = new Set(games.map(g => g.week).filter(w => w != null))
+  const allWeeks = Array.from({ length: 19 }, (_, i) => i) // 0–18
   const weekGames = games.filter(g => g.week === selectedWeek)
   const phase = getPhase(selectedWeek)
 
@@ -715,7 +716,7 @@ function Season({ games, teams, isMobile }) {
               color: active ? C.accent : C.subtle, fontSize: 11,
               fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5,
             }}>
-              {p.range[0] === p.range[1] ? `Wk ${p.range[0]}` : `Wks ${p.range[0]}–${p.range[1]}`} · {p.label}
+              {p.range[0] === p.range[1] ? `Wk ${p.range[0]}` : `Wks ${p.range[0] === 0 ? '0' : p.range[0]}–${p.range[1]}`} · {p.label}
             </div>
           )
         })}

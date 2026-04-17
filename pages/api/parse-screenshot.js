@@ -13,6 +13,7 @@ const supabase = createClient(
 // Used to help AI understand what week means what phase of the season
 const CFB_SCHEDULE_CONTEXT = `
 COLLEGE FOOTBALL SCHEDULE STRUCTURE (EA Sports CFB dynasty mode):
+- Week 0: Kickoff weekend. Early non-conference openers. Valid week — do NOT skip it.
 - Weeks 1-4: Early regular season. Non-conference games common. Records still forming.
 - Weeks 5-9: Mid regular season. Conference play begins. Rivalry implications building.
 - Weeks 10-13: Late regular season. Conference title races, rivalry week approaching.
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
       .select('week')
       .order('week', { ascending: false })
       .limit(1);
-    const latestWeek = recentGames?.[0]?.week || 1;
+    const latestWeek = recentGames?.[0]?.week ?? 0;
 
     const isGoogleDoc   = inputMimeType === 'application/vnd.google-apps.document'  || fileName?.toLowerCase().endsWith('.gdoc');
     const isGoogleSheet = inputMimeType === 'application/vnd.google-apps.spreadsheet' || fileName?.toLowerCase().endsWith('.gsheet');
