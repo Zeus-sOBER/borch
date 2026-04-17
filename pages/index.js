@@ -203,7 +203,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries 
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: "'Oswald', sans-serif", color: C.text, fontSize: 14 }}>{t.wins}-{t.losses}</div>
-                {t.streak && t.streak !== 'unknown' && t.streak !== '—' && (
+                {t.streak && t.streak !== 'unknown' && t.streak !== '—' && /^[WL]\d+$/.test(t.streak) && (
                   <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
                 )}
               </div>
@@ -392,7 +392,7 @@ function Standings({ teams, isMobile }) {
                           </span>
                         </td>
                         <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center' }}>
-                          {t.streak && t.streak !== 'unknown' && t.streak !== '—'
+                          {t.streak && t.streak !== 'unknown' && t.streak !== '—' && /^[WL]\d+$/.test(t.streak)
                             ? <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
                             : <span style={{ color: C.subtle, fontSize: 12 }}>—</span>
                           }
