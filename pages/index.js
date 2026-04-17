@@ -97,7 +97,7 @@ function Dashboard({ teams, games, players, scanLog }) {
               <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: i === 0 ? C.accent : C.muted, width: 28, textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: C.text, fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
-                <div style={{ color: C.muted, fontSize: 12 }}>{t.coach}</div>
+                <div style={{ color: C.muted, fontSize: 12 }}>{t.coach || '—'}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: "'Oswald', sans-serif", color: C.text, fontSize: 14 }}>{t.wins}-{t.losses}</div>
@@ -191,7 +191,7 @@ function Standings({ teams }) {
                     <tr key={t.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
                       <td style={{ padding: '13px 16px', textAlign: 'center' }}><span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: i < 4 ? C.accent : C.muted }}>{i + 1}</span></td>
                       <td style={{ padding: '13px 16px' }}><span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{t.name}</span></td>
-                      <td style={{ padding: '13px 16px', color: C.muted, fontSize: 13 }}>{t.coach}</td>
+                      <td style={{ padding: '13px 16px', color: t.coach ? C.muted : C.subtle, fontSize: 13 }}>{t.coach || '—'}</td>
                       <td style={{ padding: '13px 16px', textAlign: 'center', color: C.green, fontFamily: "'Oswald', sans-serif", fontSize: 17 }}>{t.wins}</td>
                       <td style={{ padding: '13px 16px', textAlign: 'center', color: C.red, fontFamily: "'Oswald', sans-serif", fontSize: 17 }}>{t.losses}</td>
                       <td style={{ padding: '13px 16px', textAlign: 'center', color: C.text, fontSize: 13 }}>{t.pts}</td>

@@ -17,13 +17,15 @@ export default async function handler(req, res) {
 
   // ── Normalize teams: rename team_name → name, join coach from coaches table ──
   const teams = (teamsRes.data || []).map((t, i) => {
+    // Support both column names: team_name (new schema) and name (original schema)
+    const teamKey = (t.team_name || t.name || '').toLowerCase().trim()
     const matchedCoach = coaches.find(
-      c => c.team?.toLowerCase() === t.team_name?.toLowerCase()
+      c => c.team?.toLowerCase().trim() === teamKey
     )
     return {
       ...t,
       name:  t.team_name || t.name || 'Unknown',
-      coach: matchedCoach?.name || t.coach || null,
+      coach: matchedCoach?.name || (t.coach && t.coach !== 'Unknown' ? t.coach : null),
       coaching_style: matchedCoach?.coaching_style || null,
       rank:  t.rank || i + 1,
     }

@@ -340,6 +340,30 @@ async function saveToSupabase(data, coaches, humanTeams) {
       }, { onConflict: 'team_name' });
       if (!error) saved.standings++;
     }
+
+    // Sync coach win/loss records from updated standings
+    if (coaches?.length > 0) {
+      for (const team of data.standings) {
+        if (!team.team_name) continue;
+        const teamKey = team.team_name.toLowerCase().trim();
+        const matchedCoach = coaches.find(
+          c => c.team?.toLowerCase().trim() === teamKey
+        );
+        if (!matchedCoach?.id) continue;
+
+        // Only update if standings have actual games played
+        const hasGames = (team.wins ?? 0) + (team.losses ?? 0) > 0;
+        if (!hasGames) continue;
+
+        await supabase.from('coaches')
+          .update({
+            overall_wins: team.wins ?? matchedCoach.overall_wins,
+            overall_losses: team.losses ?? matchedCoach.overall_losses,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', matchedCoach.id);
+      }
+    }
   }
 
   // Save championship
