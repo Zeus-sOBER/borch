@@ -923,35 +923,14 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
           <Card><p style={{ color: C.muted, margin: 0, fontSize: 13, fontStyle: 'italic' }}>No articles generated yet. Generate your first article above.</p></Card>
         )}
 
-        {viewingArticle && (
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <Badge color={C.blue}>{viewingArticle.article_type?.replace(/-/g, ' ')}</Badge>
-                {viewingArticle.week && <Badge color={C.muted} style={{ marginLeft: 6 }}>Week {viewingArticle.week}</Badge>}
-              </div>
-              <button onClick={() => setViewingArticle(null)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, color: C.muted, cursor: 'pointer', padding: '4px 10px', fontSize: 12 }}>✕ Close</button>
-            </div>
-            {viewingArticle.content.split('\n').map((line, i) => {
-              if (!line.trim()) return <div key={i} style={{ height: 8 }} />
-              const clean = line.replace(/^#+\s*/, '')
-              const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
-              return isHead
-                ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? (isMobile ? 18 : 24) : 14, color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 10, marginTop: i > 0 ? 16 : 0 }}>{clean}</div>
-                : <p key={i} style={{ color: C.text, fontSize: isMobile ? 13 : 14, margin: '0 0 10px', lineHeight: 1.8 }}>{line}</p>
-            })}
-          </Card>
-        )}
-
         <div style={{ display: 'grid', gap: 8 }}>
           {pastArticles.map(a => {
             const typeLabel = (a.article_type || 'article').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            const isViewing = viewingArticle?.id === a.id
             return (
               <Card
                 key={a.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderColor: isViewing ? C.accent + '66' : C.border }}
-                onClick={() => setViewingArticle(isViewing ? null : a)}
+                onClick={() => setViewingArticle(a)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12 }}
               >
                 <div style={{ fontSize: 22, flexShrink: 0 }}>📄</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -964,12 +943,69 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
                     <span style={{ color: C.muted, fontSize: 11 }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
                 </div>
-                <div style={{ color: isViewing ? C.accent : C.muted, fontSize: 18, flexShrink: 0 }}>{isViewing ? '▲' : '▼'}</div>
+                <div style={{ color: C.muted, fontSize: 16, flexShrink: 0 }}>▶</div>
               </Card>
             )
           })}
         </div>
       </div>
+
+      {/* ── Article reader overlay ── */}
+      {viewingArticle && (
+        <div
+          onClick={() => setViewingArticle(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 500,
+            background: 'rgba(0,0,0,0.88)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            padding: isMobile ? '0' : '32px 20px',
+            overflowY: 'auto',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: isMobile ? 0 : 14,
+              width: '100%', maxWidth: 740,
+              minHeight: isMobile ? '100vh' : 'auto',
+              padding: isMobile ? '24px 16px' : '32px 36px',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Badge color={C.blue}>{(viewingArticle.article_type || '').replace(/-/g, ' ')}</Badge>
+                {viewingArticle.week && <Badge color={C.accent}>Week {viewingArticle.week}</Badge>}
+                <span style={{ color: C.subtle, fontSize: 11, alignSelf: 'center' }}>
+                  {new Date(viewingArticle.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+              <button
+                onClick={() => setViewingArticle(null)}
+                style={{
+                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
+                  color: C.text, cursor: 'pointer', padding: '6px 14px',
+                  fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
+                  flexShrink: 0, marginLeft: 12,
+                }}
+              >✕ Close</button>
+            </div>
+
+            {/* Article content */}
+            {(viewingArticle.content || '').split('\n').map((line, i) => {
+              if (!line.trim()) return <div key={i} style={{ height: 10 }} />
+              const clean = line.replace(/^#+\s*/, '')
+              const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
+              return isHead
+                ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? (isMobile ? 22 : 28) : (isMobile ? 14 : 16), color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 14, marginTop: i > 0 ? 22 : 0 }}>{clean}</div>
+                : <p key={i} style={{ color: C.text, fontSize: isMobile ? 14 : 15, margin: '0 0 14px', lineHeight: 1.85 }}>{line}</p>
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1182,24 +1218,43 @@ function DriveSync({ onRefresh, existingScanLog, isMobile }) {
                   {result?.error && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}</div>}
                 </div>
               </div>
-              <button
-                onClick={() => parse(file)}
-                disabled={isParsing || result?.success}
-                style={{
-                  background: result?.success ? C.green + '22' : isParsing ? C.subtle : C.accent,
-                  color:      result?.success ? C.green : isParsing ? C.muted : '#000',
-                  border:     `1px solid ${result?.success ? C.green : C.accent}`,
-                  borderRadius: 6,
-                  padding: '10px 18px',
-                  cursor: result?.success || isParsing ? 'default' : 'pointer',
-                  fontFamily: "'Oswald', sans-serif", fontSize: 13, whiteSpace: 'nowrap',
-                  flexShrink: 0, minHeight: 44,
-                  alignSelf: isMobile ? 'stretch' : 'center',
-                  width: isMobile ? '100%' : 'auto',
-                }}
-              >
-                {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan with AI'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignSelf: isMobile ? 'stretch' : 'center', flexDirection: isMobile ? 'column' : 'row' }}>
+                {/* Re-scan button — always visible for synced files so schedule can be updated anytime */}
+                {result?.success && !isParsing && (
+                  <button
+                    onClick={() => setResults(r => { const n = { ...r }; delete n[file.id]; return n })}
+                    style={{
+                      background: 'transparent',
+                      color: C.muted,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6, padding: '10px 14px',
+                      cursor: 'pointer',
+                      fontFamily: "'Oswald', sans-serif", fontSize: 12,
+                      whiteSpace: 'nowrap', minHeight: 44,
+                      width: isMobile ? '100%' : 'auto',
+                    }}
+                    title="Clear sync status and re-scan this file"
+                  >
+                    ↩ Re-scan
+                  </button>
+                )}
+                <button
+                  onClick={() => parse(file)}
+                  disabled={isParsing || result?.success}
+                  style={{
+                    background: result?.success ? C.green + '22' : isParsing ? C.subtle : C.accent,
+                    color:      result?.success ? C.green : isParsing ? C.muted : '#000',
+                    border:     `1px solid ${result?.success ? C.green : C.accent}`,
+                    borderRadius: 6, padding: '10px 18px',
+                    cursor: result?.success || isParsing ? 'default' : 'pointer',
+                    fontFamily: "'Oswald', sans-serif", fontSize: 13, whiteSpace: 'nowrap',
+                    minHeight: 44,
+                    width: isMobile ? '100%' : 'auto',
+                  }}
+                >
+                  {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan with AI'}
+                </button>
+              </div>
             </Card>
           )
         })}
