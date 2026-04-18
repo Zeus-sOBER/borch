@@ -1076,28 +1076,25 @@ function PlayerStats({ players, isMobile }) {
   )
 }
 
-// ── Media Center ───────────────────────────────────────────────
+// ── Media Center (v2 — articles first, generator at bottom) ────
 function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
-  const [type, setType]       = useState('power_rankings')
-  const [loading, setLoading] = useState(false)
-  const [article, setArticle] = useState(null)
-  const [pinInput, setPinInput] = useState('')
-  const [pinError, setPinError] = useState(false)
-  const [pastArticles, setPastArticles]     = useState([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [viewingArticle, setViewingArticle] = useState(null)
-
-  const loadHistory = useCallback(async () => {
-    setLoadingHistory(true)
-    try {
-      const res  = await fetch('/api/articles?limit=30')
-      const data = await res.json()
-      setPastArticles(data.articles || [])
-    } catch (e) { console.error(e) }
-    setLoadingHistory(false)
-  }, [])
-
-  useEffect(() => { loadHistory() }, [loadHistory])
+  const [pinInput,        setPinInput]        = useState('')
+  const [pinError,        setPinError]        = useState(false)
+  const [showPinBar,      setShowPinBar]      = useState(false)
+  const [pastArticles,    setPastArticles]    = useState([])
+  const [loadingHistory,  setLoadingHistory]  = useState(false)
+  const [expandedId,      setExpandedId]      = useState(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [isDeleting,      setIsDeleting]      = useState(false)
+  const [isEditing,       setIsEditing]       = useState(false)
+  const [editContent,     setEditContent]     = useState('')
+  const [isSaving,        setIsSaving]        = useState(false)
+  const [showGenerator,   setShowGenerator]   = useState(false)
+  const [genType,         setGenType]         = useState('power-rankings')
+  const [genWeek,         setGenWeek]         = useState('')
+  const [isGenerating,    setIsGenerating]    = useState(false)
+  const [genError,        setGenError]        = useState('')
+  const [filterType,      setFilterType]      = useState('all')
 
   const TYPES = [
     { id: 'power-rankings',    label: 'Power Rankings',    icon: '📊' },
@@ -1106,192 +1103,231 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
     { id: 'rivalry-breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
   ]
 
-  const generate = async () => {
-    setLoading(true); setArticle(null); setViewingArticle(null)
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true)
     try {
-      const res = await fetch('/api/generate-article', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleType: type, pin: commPin }),
-      })
-      const data = await res.json()
-      if (data.error) {
-        setArticle('❌ ' + data.error)
-      } else {
-        setArticle(data.article)
-        loadHistory()
-      }
-    } catch (e) { setArticle('Error generating article.') }
-    setLoading(false)
-  }
+      const url = filterType === 'all' ? '/api/articles?limit=30' : `/api/articles?limit=30&article_type=${filterType}`
+      const data = await fetch(url).then(r => r.json())
+      setPastArticles(data.articles || [])
+    } catch (e) { console.error(e) }
+    setLoadingHistory(false)
+  }, [filterType])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   const tryPin = async () => {
     setPinError(false)
     const res = await fetch('/api/coaches/0', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin: pinInput }),
     })
     if (res.status === 403) { setPinError(true); return }
-    onPinSet(pinInput)
-    setPinInput('')
+    onPinSet(pinInput); setPinInput(''); setShowPinBar(false)
   }
+
+  const generate = async () => {
+    setIsGenerating(true); setGenError('')
+    try {
+      const res  = await fetch('/api/generate-article', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleType: genType, week: genWeek || undefined, pin: commPin }),
+      })
+      const data = await res.json()
+      if (data.error) { setGenError(data.error); return }
+      setShowGenerator(false); loadHistory()
+    } catch (e) { setGenError('Generation failed. Try again.') }
+    finally { setIsGenerating(false) }
+  }
+
+  const deleteArticle = async (id) => {
+    setIsDeleting(true)
+    try {
+      await fetch('/api/articles', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, pin: commPin }) })
+      if (expandedId === id) setExpandedId(null)
+      setDeleteConfirmId(null); loadHistory()
+    } catch (e) { /* ignore */ }
+    finally { setIsDeleting(false) }
+  }
+
+  const saveArticle = async (a) => {
+    setIsSaving(true)
+    try {
+      await fetch('/api/articles', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, content: editContent, pin: commPin }) })
+      setIsEditing(false); loadHistory()
+    } catch (e) { /* ignore */ }
+    finally { setIsSaving(false) }
+  }
+
+  const expandedArticle = pastArticles.find(a => a.id === expandedId)
 
   return (
     <div>
-      <SectionTitle isMobile={isMobile} sub="AI-Powered ESPN-Style Coverage">Media Center</SectionTitle>
+      {/* ── Header row ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+        <SectionTitle isMobile={isMobile} sub="AI-Powered ESPN-Style Coverage">Media Center</SectionTitle>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 4 }}>
+          {commPin
+            ? <><Badge color={C.green}>✓ Commissioner</Badge><button onClick={() => onPinSet(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Lock</button></>
+            : <button onClick={() => setShowPinBar(b => !b)} style={{ background: 'transparent', color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1 }}>🔒 Commissioner Login</button>
+          }
+        </div>
+      </div>
 
-      {!commPin && (
-        <Card style={{ marginBottom: 20, maxWidth: 420 }}>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>🔐 Commissioner Login</div>
-          <div style={{ color: C.muted, fontSize: 13, marginBottom: 12 }}>Article generation requires commissioner access.</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="password"
-              value={pinInput}
+      {/* ── Inline PIN bar ── */}
+      {showPinBar && !commPin && (
+        <Card style={{ marginBottom: 16, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.muted, letterSpacing: 1 }}>ENTER PIN:</span>
+            <input type="password" placeholder="Commissioner PIN" value={pinInput}
               onChange={e => { setPinInput(e.target.value); setPinError(false) }}
               onKeyDown={e => e.key === 'Enter' && tryPin()}
-              placeholder="Enter commissioner PIN"
-              style={{
-                flex: 1, background: C.surface, border: `1px solid ${pinError ? C.red : C.border}`,
-                borderRadius: 6, padding: '12px 12px', color: C.text, fontSize: 14, outline: 'none',
-              }}
+              style={{ background: C.bg, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 14, width: 160 }}
+              autoFocus
             />
-            <button onClick={tryPin} style={{
-              background: C.accent, color: '#000', border: 'none', borderRadius: 6,
-              padding: '12px 18px', cursor: 'pointer',
-              fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
-              minHeight: 48,
-            }}>Unlock</button>
+            <button onClick={tryPin} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 18px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700 }}>Unlock</button>
+            <button onClick={() => { setShowPinBar(false); setPinError(false); setPinInput('') }} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+            {pinError && <span style={{ color: C.red, fontSize: 12 }}>❌ Incorrect PIN</span>}
           </div>
-          {pinError && <div style={{ color: C.red, fontSize: 12, marginTop: 6 }}>Incorrect PIN</div>}
         </Card>
       )}
-      {commPin && (
-        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Badge color={C.green}>🔓 Commissioner Mode Active</Badge>
-          <button onClick={() => onPinSet(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Lock</button>
-        </div>
-      )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {TYPES.map(t => <PillBtn key={t.id} small={isMobile} active={type === t.id} onClick={() => setType(t.id)}>{t.icon} {t.label}</PillBtn>)}
+      {/* ── Filter tabs ── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        {['all', ...TYPES.map(t => t.id)].map(id => {
+          const meta = id === 'all' ? { icon: '📚', label: 'All' } : TYPES.find(t => t.id === id)
+          const active = filterType === id
+          return (
+            <button key={id} onClick={() => { setFilterType(id); setExpandedId(null) }} style={{
+              background: active ? C.accent : C.card, color: active ? '#000' : C.muted,
+              border: `1px solid ${active ? C.accent : C.border}`, borderRadius: 6,
+              padding: '6px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 0.5,
+            }}>{meta.icon} {meta.label}</button>
+          )
+        })}
+        <button onClick={loadHistory} disabled={loadingHistory} style={{ marginLeft: 'auto', background: C.card, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 11 }}>
+          {loadingHistory ? '⏳' : '🔄 Refresh'}
+        </button>
       </div>
-      <button onClick={generate} disabled={loading || !commPin} style={{
-        background: !commPin ? C.subtle : loading ? C.subtle : C.accent,
-        color: (!commPin || loading) ? C.muted : '#000',
-        border: 'none', borderRadius: 8, padding: '14px 32px',
-        cursor: (!commPin || loading) ? 'not-allowed' : 'pointer',
-        fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1,
-        textTransform: 'uppercase', marginBottom: 24, width: isMobile ? '100%' : 'auto',
-      }}>{loading ? '⏳ Generating...' : !commPin ? '🔒 Login to Generate' : '⚡ Generate Article'}</button>
 
-      {article && (
-        <Card style={{ marginBottom: 24 }}>
-          {article.split('\n').map((line, i) => {
-            if (!line.trim()) return <div key={i} style={{ height: 8 }} />
-            const clean = line.replace(/^#+\s*/, '')
-            const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
-            return isHead
-              ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? (isMobile ? 20 : 26) : 15, color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 12, marginTop: i > 0 ? 18 : 0 }}>{clean}</div>
-              : <p key={i} style={{ color: C.text, fontSize: isMobile ? 14 : 15, margin: '0 0 12px', lineHeight: 1.8 }}>{line}</p>
-          })}
+      {/* ── Expanded article view ── */}
+      {expandedArticle && (
+        <Card style={{ marginBottom: 20, borderLeft: `4px solid ${C.purple}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                <Badge color={C.accent}>{TYPES.find(t => t.id === expandedArticle.article_type)?.icon} {(expandedArticle.article_type || '').replace(/-/g, ' ')}</Badge>
+                {expandedArticle.week && <Badge color={C.blue}>Week {expandedArticle.week}</Badge>}
+              </div>
+              <div style={{ color: C.muted, fontSize: 11 }}>{new Date(expandedArticle.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {commPin && !isEditing && <button onClick={() => { setEditContent(expandedArticle.content); setIsEditing(true) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>✏️ Edit</button>}
+              {commPin && isEditing && <><button onClick={() => saveArticle(expandedArticle)} disabled={isSaving} style={{ background: C.green, color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>{isSaving ? 'Saving…' : '💾 Save'}</button><button onClick={() => setIsEditing(false)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 6, padding: '7px 12px', cursor: 'pointer', fontSize: 11 }}>Cancel</button></>}
+              <button onClick={() => navigator.clipboard.writeText(isEditing ? editContent : expandedArticle.content)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 12px', cursor: 'pointer', fontSize: 11 }}>📋 Copy</button>
+              <button onClick={() => { setExpandedId(null); setIsEditing(false) }} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 10px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+            </div>
+          </div>
+          <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: 16 }} />
+          {isEditing
+            ? <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ width: '100%', minHeight: 400, background: C.bg, color: C.text, border: `1px solid ${C.accent}`, borderRadius: 6, padding: 14, fontSize: 14, lineHeight: 1.8, fontFamily: 'Lato,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
+            : (expandedArticle.content || '').split('\n').map((line, i) => {
+                if (!line.trim()) return <div key={i} style={{ height: 10 }} />
+                const clean = line.replace(/^#+\s*/, '')
+                const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
+                return isHead
+                  ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? (isMobile ? 20 : 24) : 14, color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 12, marginTop: i > 0 ? 18 : 0 }}>{clean}</div>
+                  : <p key={i} style={{ color: C.text, fontSize: isMobile ? 14 : 15, margin: '0 0 12px', lineHeight: 1.85 }}>{line}</p>
+              })
+          }
         </Card>
       )}
 
-      <div style={{ marginTop: 36 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>📰 Article Archive</div>
-          <button onClick={loadHistory} disabled={loadingHistory} style={{ background: C.card, color: loadingHistory ? C.muted : C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12 }}>
-            {loadingHistory ? '⏳' : '🔄 Refresh'}
-          </button>
-        </div>
+      {/* ── Articles list ── */}
+      {pastArticles.length === 0 && !loadingHistory && (
+        <Card style={{ marginBottom: 20 }}>
+          <p style={{ color: C.muted, margin: 0, fontSize: 13, fontStyle: 'italic' }}>
+            {commPin ? 'No articles yet. Use "✦ Generate New Article" below to write your first dynasty story.' : 'Check back soon — the commissioner will publish articles here.'}
+          </p>
+        </Card>
+      )}
 
-        {pastArticles.length === 0 && !loadingHistory && (
-          <Card><p style={{ color: C.muted, margin: 0, fontSize: 13, fontStyle: 'italic' }}>No articles generated yet. Generate your first article above.</p></Card>
-        )}
-
-        <div style={{ display: 'grid', gap: 8 }}>
-          {pastArticles.map(a => {
-            const typeLabel = (a.article_type || 'article').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            return (
-              <Card
-                key={a.id}
-                onClick={() => setViewingArticle(a)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12 }}
-              >
-                <div style={{ fontSize: 22, flexShrink: 0 }}>📄</div>
+      <div style={{ display: 'grid', gap: 10, marginBottom: 24 }}>
+        {pastArticles.map(a => {
+          const meta      = TYPES.find(t => t.id === a.article_type) || { icon: '📄', label: a.article_type }
+          const isOpen    = expandedId === a.id
+          const confirmDel = deleteConfirmId === a.id
+          return (
+            <Card key={a.id} style={{ cursor: 'pointer' }}>
+              <div onClick={() => { setExpandedId(isOpen ? null : a.id); setIsEditing(false) }} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>{meta.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: C.text, fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {a.title || typeLabel}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Badge color={C.blue}>{typeLabel}</Badge>
+                  <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title || meta.label}</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Badge color={C.blue}>{meta.label}</Badge>
                     {a.week && <Badge color={C.muted}>Wk {a.week}</Badge>}
                     <span style={{ color: C.muted, fontSize: 11 }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
                 </div>
-                <div style={{ color: C.muted, fontSize: 16, flexShrink: 0 }}>▶</div>
-              </Card>
-            )
-          })}
-        </div>
+                <span style={{ color: C.muted, fontSize: 14, flexShrink: 0 }}>{isOpen ? '▼' : '▶'}</span>
+              </div>
+              {commPin && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }} onClick={e => e.stopPropagation()}>
+                  {!confirmDel
+                    ? <button onClick={() => setDeleteConfirmId(a.id)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 5, padding: '4px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🗑 Delete</button>
+                    : <><span style={{ color: C.muted, fontSize: 12, alignSelf: 'center' }}>Sure?</span>
+                        <button onClick={() => deleteArticle(a.id)} disabled={isDeleting} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10 }}>Yes, Delete</button>
+                        <button onClick={() => setDeleteConfirmId(null)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
+                      </>
+                  }
+                </div>
+              )}
+            </Card>
+          )
+        })}
       </div>
 
-      {/* ── Article reader overlay ── */}
-      {viewingArticle && (
-        <div
-          onClick={() => setViewingArticle(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 500,
-            background: 'rgba(0,0,0,0.88)',
-            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-            padding: isMobile ? '0' : '32px 20px',
-            overflowY: 'auto',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: C.card, border: `1px solid ${C.border}`,
-              borderRadius: isMobile ? 0 : 14,
-              width: '100%', maxWidth: 740,
-              minHeight: isMobile ? '100vh' : 'auto',
-              padding: isMobile ? '24px 16px' : '32px 36px',
-              overflowY: 'auto',
-              position: 'relative',
-            }}
-          >
-            {/* Modal header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <Badge color={C.blue}>{(viewingArticle.article_type || '').replace(/-/g, ' ')}</Badge>
-                {viewingArticle.week && <Badge color={C.accent}>Week {viewingArticle.week}</Badge>}
-                <span style={{ color: C.subtle, fontSize: 11, alignSelf: 'center' }}>
-                  {new Date(viewingArticle.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                </span>
-              </div>
-              <button
-                onClick={() => setViewingArticle(null)}
-                style={{
-                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
-                  color: C.text, cursor: 'pointer', padding: '6px 14px',
-                  fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
-                  flexShrink: 0, marginLeft: 12,
-                }}
-              >✕ Close</button>
-            </div>
+      {/* ── Generate panel (commissioner only, collapsed by default) ── */}
+      {commPin && (
+        <div>
+          <button onClick={() => setShowGenerator(g => !g)} style={{
+            background: showGenerator ? C.surface : C.green, color: showGenerator ? C.green : '#000',
+            border: `1px solid ${C.green}`, borderRadius: 8, padding: '10px 24px',
+            cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700,
+            letterSpacing: 0.5, marginBottom: 12, width: isMobile ? '100%' : 'auto',
+          }}>
+            <span style={{ fontSize: 16 }}>✦</span> {showGenerator ? '✕ Close Generator' : 'Generate New Article'}
+          </button>
 
-            {/* Article content */}
-            {(viewingArticle.content || '').split('\n').map((line, i) => {
-              if (!line.trim()) return <div key={i} style={{ height: 10 }} />
-              const clean = line.replace(/^#+\s*/, '')
-              const isHead = i === 0 || (line.length < 90 && (line.startsWith('#') || line === line.toUpperCase()))
-              return isHead
-                ? <div key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: i === 0 ? (isMobile ? 22 : 28) : (isMobile ? 14 : 16), color: i === 0 ? C.text : C.accent, letterSpacing: 1, marginBottom: 14, marginTop: i > 0 ? 22 : 0 }}>{clean}</div>
-                : <p key={i} style={{ color: C.text, fontSize: isMobile ? 14 : 15, margin: '0 0 14px', lineHeight: 1.85 }}>{line}</p>
-            })}
-          </div>
+          {showGenerator && (
+            <Card style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: "'Oswald', sans-serif", color: C.accent, fontSize: 14, letterSpacing: 1, marginBottom: 14 }}>✦ GENERATE NEW ARTICLE</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                {TYPES.map(t => (
+                  <button key={t.id} onClick={() => setGenType(t.id)} style={{
+                    background: genType === t.id ? C.accent : C.card, color: genType === t.id ? '#000' : C.muted,
+                    border: `1px solid ${genType === t.id ? C.accent : C.border}`, borderRadius: 6,
+                    padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11,
+                  }}>{t.icon} {t.label}</button>
+                ))}
+              </div>
+              <input type="number" placeholder="Week # (optional)" value={genWeek} onChange={e => setGenWeek(e.target.value)}
+                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 13, width: 160, marginBottom: 14 }}
+              />
+              {genError && <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>❌ {genError}</div>}
+              <button onClick={generate} disabled={isGenerating} style={{
+                background: isGenerating ? C.surface : C.accent, color: isGenerating ? C.muted : '#000',
+                border: 'none', borderRadius: 7, padding: '12px 28px',
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                fontFamily: "'Oswald', sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: 0.5,
+                width: isMobile ? '100%' : 'auto',
+              }}>{isGenerating ? '⏳ Generating… this takes ~20 sec' : '✦ Generate Article'}</button>
+            </Card>
+          )}
+        </div>
+      )}
+      {!commPin && (
+        <div style={{ textAlign: 'center', padding: '20px 0', color: C.muted, fontSize: 13 }}>
+          <button onClick={() => setShowPinBar(true)} style={{ background: 'transparent', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: '8px 20px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12 }}>🔒 Commissioner Login to Generate Articles</button>
         </div>
       )}
     </div>
