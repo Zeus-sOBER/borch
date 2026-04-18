@@ -365,8 +365,8 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
   const heroImageId       = settings?.hero_image_id   ?? null
   const heroImageMime     = settings?.hero_image_mime ?? 'image/png'
   const heroImageSrc      = heroImageId ? `/api/drive-image?id=${heroImageId}&mime=${encodeURIComponent(heroImageMime)}` : null
-  const featuredGameId    = settings?.featured_game_id ?? null
-  const featuredGame      = games.find(g => g.id === featuredGameId) || [...finalGames].reverse()[0] || null
+  const featuredGameId    = settings?.featured_game_id != null ? Number(settings.featured_game_id) : null
+  const featuredGame      = games.find(g => Number(g.id) === featuredGameId) || [...finalGames].reverse()[0] || null
   const fgHomeWon         = featuredGame && featuredGame.home_score > featuredGame.away_score
   const fgAwayWon         = featuredGame && featuredGame.away_score > featuredGame.home_score
 
@@ -408,7 +408,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
     if (commPin) {
       if (type === 'article') runSave({ featured_article_id: payload }, commPin, setPinningId)
       else if (type === 'image') runSave({ hero_image_id: payload.id, hero_image_mime: payload.mimeType }, commPin, setSavingImage)
-      else if (type === 'game')  runSave({ featured_game_id: payload }, commPin, setPinningId)
+      else if (type === 'game')  runSave({ featured_game_id: Number(payload) }, commPin, setPinningId)
     } else {
       setPendingAction({ type, payload }); setShowPinEntry(true)
     }
@@ -419,7 +419,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
     const { type, payload } = pendingAction
     if (type === 'article') runSave({ featured_article_id: payload }, pickerPin, setPinningId)
     else if (type === 'image') runSave({ hero_image_id: payload.id, hero_image_mime: payload.mimeType }, pickerPin, setSavingImage)
-    else if (type === 'game')  runSave({ featured_game_id: payload }, pickerPin, setPinningId)
+    else if (type === 'game')  runSave({ featured_game_id: Number(payload) }, pickerPin, setPinningId)
   }
 
   const SectionLabel = ({ color = C.accent, children }) => (
@@ -527,7 +527,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           {pickerTab === 'game' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
               {[...finalGames].reverse().map(g => {
-                const isActive = g.id === featuredGame?.id
+                const isActive = Number(g.id) === featuredGameId
                 const homeWon  = g.home_score > g.away_score
                 return (
                   <div key={g.id} onClick={() => pickItem('game', g.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 7, cursor: 'pointer', background: isActive ? C.green+'12' : C.card, border: `1px solid ${isActive ? C.green+'55' : C.border}` }}>
