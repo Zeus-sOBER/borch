@@ -315,7 +315,7 @@ Rules:
 }
 
 // ─── Parse a Google Doc ───────────────────────────────────────────────────────
-async function parseGoogleDoc(docText, coaches, humanTeams, latestWeek) {
+async function parseGoogleDoc(docText, coaches, humanTeams, currentWeek) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
 
   const prompt = `You are parsing a Google Doc uploaded by a dynasty league commissioner.
@@ -323,7 +323,8 @@ async function parseGoogleDoc(docText, coaches, humanTeams, latestWeek) {
 ${CFB_SCHEDULE_CONTEXT}
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
-CURRENT LATEST WEEK IN DATABASE: ${latestWeek}
+CURRENT OFFICIAL WEEK (commissioner-set): ${currentWeek}
+IMPORTANT: Only reference or update data from week ${currentWeek} or earlier.
 
 The document may contain any combination of:
 - Game scores and results
@@ -374,7 +375,7 @@ Match team names to the known human coaches where possible.`;
 }
 
 // ─── Parse an Image ───────────────────────────────────────────────────────────
-async function parseImage(base64, mimeType, coaches, humanTeams, latestWeek) {
+async function parseImage(base64, mimeType, coaches, humanTeams, currentWeek) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
 
   const prompt = `You are analyzing a screenshot from EA Sports College Football (CFB) dynasty mode.

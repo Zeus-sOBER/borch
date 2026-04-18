@@ -19,8 +19,17 @@ ON CONFLICT DO NOTHING;
 -- 3. Enable RLS + allow public read (your service role can write via API)
 ALTER TABLE league_settings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Public read league_settings"
-  ON league_settings FOR SELECT USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'league_settings'
+      AND policyname = 'Public read league_settings'
+  ) THEN
+    CREATE POLICY "Public read league_settings"
+      ON league_settings FOR SELECT USING (true);
+  END IF;
+END $$;
 
 -- 4. Add rank column to teams (for storing actual CFP/AP poll positions)
 ALTER TABLE teams
