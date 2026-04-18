@@ -198,12 +198,10 @@ const ARTICLE_TYPE_LABELS = {
 
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin }) {
   const finalGames  = games.filter(g => g.status === 'Final' || g.is_final)
-  const heroGame    = [...finalGames].reverse()[0]
   const currentWeek = settings?.current_week ?? 0
 
   const rankedTeams = [...teams].sort((a, b) => {
-    const aRank = a.rank ?? 9999
-    const bRank = b.rank ?? 9999
+    const aRank = a.rank ?? 9999; const bRank = b.rank ?? 9999
     if (aRank !== bRank) return aRank - bRank
     return (b.wins - a.wins) || ((b.pts - b.pts_against) - (a.pts - a.pts_against))
   })
@@ -212,121 +210,83 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
   const topRusher   = players.find(p => p.pos === 'RB')
   const topReceiver = players.find(p => p.pos === 'WR')
 
-  const heroHomeWon = heroGame && heroGame.home_score > heroGame.away_score
-  const heroAwayWon = heroGame && heroGame.away_score > heroGame.home_score
-
   // Picker state
-  const [showPicker,       setShowPicker]       = useState(false)
-  const [pickerTab,        setPickerTab]        = useState('article') // 'article' | 'image'
-  const [pinningId,        setPinningId]        = useState(null)
-  const [pickerPin,        setPickerPin]        = useState('')
-  const [pinError,         setPinError]         = useState('')
-  const [showPinEntry,     setShowPinEntry]     = useState(false)
-  const [pendingAction,    setPendingAction]    = useState(null) // { type, payload }
+  const [showPicker,   setShowPicker]   = useState(false)
+  const [pickerTab,    setPickerTab]    = useState('article')
+  const [pinningId,    setPinningId]    = useState(null)
+  const [pickerPin,    setPickerPin]    = useState('')
+  const [pinError,     setPinError]     = useState('')
+  const [showPinEntry, setShowPinEntry] = useState(false)
+  const [pendingAction,setPendingAction]= useState(null)
+  const [driveFiles,   setDriveFiles]   = useState([])
+  const [driveLoading, setDriveLoading] = useState(false)
+  const [driveError,   setDriveError]   = useState('')
+  const [savingImage,  setSavingImage]  = useState(false)
 
-  // Drive image picker state
-  const [driveFiles,       setDriveFiles]       = useState([])
-  const [driveLoading,     setDriveLoading]     = useState(false)
-  const [driveError,       setDriveError]       = useState('')
-  const [savingImage,      setSavingImage]      = useState(false)
-
+  // Derived values
   const featuredArticleId = settings?.featured_article_id ?? null
   const featuredArticle   = articles.find(a => a.id === featuredArticleId) || articles[0] || null
-  const otherArticles     = articles.filter(a => a.id !== featuredArticle?.id).slice(0, 3)
+  const otherArticles     = articles.filter(a => a.id !== featuredArticle?.id).slice(0, 4)
   const heroImageId       = settings?.hero_image_id   ?? null
   const heroImageMime     = settings?.hero_image_mime ?? 'image/png'
   const heroImageSrc      = heroImageId ? `/api/drive-image?id=${heroImageId}&mime=${encodeURIComponent(heroImageMime)}` : null
+  const featuredGameId    = settings?.featured_game_id ?? null
+  const featuredGame      = games.find(g => g.id === featuredGameId) || [...finalGames].reverse()[0] || null
+  const fgHomeWon         = featuredGame && featuredGame.home_score > featuredGame.away_score
+  const fgAwayWon         = featuredGame && featuredGame.away_score > featuredGame.home_score
 
   async function loadDriveFiles() {
     if (driveFiles.length > 0) return
-    setDriveLoading(true)
-    setDriveError('')
+    setDriveLoading(true); setDriveError('')
     try {
-      const res  = await fetch('/api/drive-files')
-      const json = await res.json()
-      // Filter to images only
-      const images = (json.files || []).filter(f => f.mimeType && f.mimeType.startsWith('image/'))
-      setDriveFiles(images)
-    } catch (e) {
-      setDriveError('Could not load Drive files.')
-    } finally {
-      setDriveLoading(false)
-    }
+      const json = await fetch('/api/drive-files').then(r => r.json())
+      setDriveFiles((json.files || []).filter(f => f.mimeType && f.mimeType.startsWith('image/')))
+    } catch { setDriveError('Could not load Drive files.') }
+    finally { setDriveLoading(false) }
   }
 
-  function openPicker(tab = 'article') {
-    setPickerTab(tab)
-    setShowPicker(p => {
-      const next = !p || pickerTab !== tab
-      if (next && tab === 'image') loadDriveFiles()
-      return next
-    })
-    setShowPinEntry(false)
-    setPinError('')
+  function openPicker(tab) {
+    const opening = !showPicker || pickerTab !== tab
+    setPickerTab(tab); setShowPicker(opening)
+    setShowPinEntry(false); setPinError('')
+    if (opening && tab === 'image') loadDriveFiles()
   }
 
   async function saveSettings(patch, pin) {
-    const res  = await fetch('/api/league-settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin, ...patch }),
-    })
+    const res  = await fetch('/api/league-settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin, ...patch }) })
     const json = await res.json()
     if (!res.ok) throw new Error(json.error || 'Failed')
-    // Reflect new settings locally
     Object.assign(settings, json)
     if (onArticlesChange) onArticlesChange()
   }
 
-  async function pinArticle(articleId, pin) {
-    setPinningId(articleId)
-    setPinError('')
+  async function runSave(patch, pin, setWorking) {
+    setWorking(true); setPinError('')
     try {
-      await saveSettings({ featured_article_id: articleId }, pin)
-      setShowPicker(false)
-      setShowPinEntry(false)
-      setPickerPin('')
-      setPendingAction(null)
-    } catch (err) {
-      setPinError(err.message === 'Invalid commissioner PIN' ? 'Wrong PIN' : err.message)
-    } finally {
-      setPinningId(null)
+      await saveSettings(patch, pin)
+      setShowPicker(false); setShowPinEntry(false); setPickerPin(''); setPendingAction(null)
+    } catch (err) { setPinError(err.message === 'Invalid commissioner PIN' ? 'Wrong PIN' : err.message) }
+    finally { setWorking(null) }
+  }
+
+  function pickItem(type, payload) {
+    if (commPin) {
+      if (type === 'article') runSave({ featured_article_id: payload }, commPin, setPinningId)
+      else if (type === 'image') runSave({ hero_image_id: payload.id, hero_image_mime: payload.mimeType }, commPin, setSavingImage)
+      else if (type === 'game')  runSave({ featured_game_id: payload }, commPin, setPinningId)
+    } else {
+      setPendingAction({ type, payload }); setShowPinEntry(true)
     }
-  }
-
-  async function pinImage(file, pin) {
-    setSavingImage(true)
-    setPinError('')
-    try {
-      await saveSettings({ hero_image_id: file.id, hero_image_mime: file.mimeType }, pin)
-      setShowPicker(false)
-      setShowPinEntry(false)
-      setPickerPin('')
-      setPendingAction(null)
-    } catch (err) {
-      setPinError(err.message === 'Invalid commissioner PIN' ? 'Wrong PIN' : err.message)
-    } finally {
-      setSavingImage(false)
-    }
-  }
-
-  function handlePickArticle(articleId) {
-    if (commPin) { pinArticle(articleId, commPin) }
-    else { setPendingAction({ type: 'article', payload: articleId }); setShowPinEntry(true) }
-  }
-
-  function handlePickImage(file) {
-    if (commPin) { pinImage(file, commPin) }
-    else { setPendingAction({ type: 'image', payload: file }); setShowPinEntry(true) }
   }
 
   function handlePinSubmit() {
     if (!pickerPin || !pendingAction) return
-    if (pendingAction.type === 'article') pinArticle(pendingAction.payload, pickerPin)
-    else if (pendingAction.type === 'image') pinImage(pendingAction.payload, pickerPin)
+    const { type, payload } = pendingAction
+    if (type === 'article') runSave({ featured_article_id: payload }, pickerPin, setPinningId)
+    else if (type === 'image') runSave({ hero_image_id: payload.id, hero_image_mime: payload.mimeType }, pickerPin, setSavingImage)
+    else if (type === 'game')  runSave({ featured_game_id: payload }, pickerPin, setPinningId)
   }
 
-  // Section label helper
   const SectionLabel = ({ color = C.accent, children }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
       <div style={{ width: 4, height: 18, background: color, borderRadius: 2, flexShrink: 0 }} />
@@ -334,465 +294,299 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
     </div>
   )
 
+  // Reusable PIN entry row
+  const PinEntry = () => showPinEntry ? (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+      <input type="password" placeholder="Commissioner PIN" value={pickerPin}
+        onChange={e => setPickerPin(e.target.value)} onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+        style={{ flex: 1, minWidth: 130, background: C.card, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 6, padding: '8px 12px', color: C.text, fontSize: 13 }}
+      />
+      <button onClick={handlePinSubmit} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700 }}>Confirm</button>
+      {pinError && <span style={{ color: C.red, fontSize: 12, width: '100%' }}>❌ {pinError}</span>}
+    </div>
+  ) : null
+
   return (
     <div>
 
-      {/* ── HERO: Latest Game Result ── */}
-      <div style={{ marginBottom: 28 }}>
-        <SectionLabel color={C.accent}>
-          {heroGame ? `Latest Result · Week ${heroGame.week}` : 'Latest Result'}
-        </SectionLabel>
+      {/* ── COMMISSIONER PICKER BAR ── */}
+      {(articles.length > 0 || finalGames.length > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginRight: 4 }}>📌 Commissioner</span>
+          {articles.length > 0 && (
+            <button onClick={() => openPicker('article')} style={{ background: showPicker && pickerTab==='article' ? C.purple+'33' : 'transparent', color: showPicker && pickerTab==='article' ? C.purple : C.muted, border: `1px solid ${showPicker && pickerTab==='article' ? C.purple+'66' : C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>📰 Story</button>
+          )}
+          <button onClick={() => openPicker('image')} style={{ background: showPicker && pickerTab==='image' ? C.blue+'33' : 'transparent', color: showPicker && pickerTab==='image' ? C.blue : C.muted, border: `1px solid ${showPicker && pickerTab==='image' ? C.blue+'66' : C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>🖼️ Image</button>
+          {finalGames.length > 0 && (
+            <button onClick={() => openPicker('game')} style={{ background: showPicker && pickerTab==='game' ? C.green+'33' : 'transparent', color: showPicker && pickerTab==='game' ? C.green : C.muted, border: `1px solid ${showPicker && pickerTab==='game' ? C.green+'66' : C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>🏈 Game</button>
+          )}
+        </div>
+      )}
 
-        {heroGame ? (
-          <div style={{
-            background: `linear-gradient(135deg, #12121a 0%, #0c0c13 60%, #14101a 100%)`,
-            border: `1px solid ${C.border}`,
-            borderLeft: `4px solid ${C.accent}`,
-            borderRadius: 12,
-            padding: isMobile ? '20px 18px' : '32px 40px',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            {/* Subtle diagonal texture */}
-            <div style={{
-              position: 'absolute', inset: 0, opacity: 0.025,
-              background: 'repeating-linear-gradient(45deg, #c9a84c 0px, #c9a84c 1px, transparent 1px, transparent 22px)',
-              pointerEvents: 'none',
-            }} />
-
-            {/* FINAL badge */}
-            <div style={{
-              position: 'absolute', top: isMobile ? 14 : 22, right: isMobile ? 14 : 28,
-              background: C.accent + '20', color: C.accent,
-              border: `1px solid ${C.accent}55`,
-              fontFamily: "'Oswald', sans-serif", fontSize: 10,
-              letterSpacing: 3, padding: '4px 14px', borderRadius: 4,
-              textTransform: 'uppercase',
-            }}>FINAL</div>
-
-            <div style={{ position: 'relative' }}>
-              {/* Home team */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                marginBottom: 10, opacity: heroHomeWon ? 1 : 0.45,
-              }}>
-                <div>
-                  <div style={{
-                    fontFamily: "'Oswald', sans-serif",
-                    fontSize: isMobile ? 22 : 38, fontWeight: 700,
-                    color: C.text, letterSpacing: 0.5,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    maxWidth: isMobile ? 200 : 480,
-                  }}>{heroGame.home_team}</div>
-                  {heroHomeWon && (
-                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 3 }}>🏆 WINNER</div>
-                  )}
-                </div>
-                <div style={{
-                  fontFamily: "'Oswald', sans-serif",
-                  fontSize: isMobile ? 52 : 80, fontWeight: 700,
-                  color: heroHomeWon ? C.accent : '#3a3a4a',
-                  lineHeight: 1, flexShrink: 0, marginLeft: 16,
-                }}>{heroGame.home_score}</div>
-              </div>
-
-              {/* VS divider */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
-                <div style={{ flex: 1, height: 1, background: C.border }} />
-                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3 }}>VS</span>
-                <div style={{ flex: 1, height: 1, background: C.border }} />
-              </div>
-
-              {/* Away team */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                opacity: heroAwayWon ? 1 : 0.45,
-              }}>
-                <div>
-                  <div style={{
-                    fontFamily: "'Oswald', sans-serif",
-                    fontSize: isMobile ? 22 : 38, fontWeight: 700,
-                    color: C.text, letterSpacing: 0.5,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    maxWidth: isMobile ? 200 : 480,
-                  }}>{heroGame.away_team}</div>
-                  {heroAwayWon && (
-                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 3 }}>🏆 WINNER</div>
-                  )}
-                </div>
-                <div style={{
-                  fontFamily: "'Oswald', sans-serif",
-                  fontSize: isMobile ? 52 : 80, fontWeight: 700,
-                  color: heroAwayWon ? C.accent : '#3a3a4a',
-                  lineHeight: 1, flexShrink: 0, marginLeft: 16,
-                }}>{heroGame.away_score}</div>
-              </div>
-            </div>
-
-            {/* Footer: see all scores CTA */}
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setTab('Season')} style={{
-                background: 'transparent', color: C.accent,
-                border: `1px solid ${C.accent}44`,
-                borderRadius: 6, padding: '6px 16px',
-                cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
-                fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase',
-                transition: 'all 0.15s',
-              }}>See All Scores →</button>
-            </div>
+      {/* ── COMMISSIONER PICKER PANEL ── */}
+      {showPicker && (
+        <Card style={{ marginBottom: 20, padding: '16px 18px', borderColor: pickerTab==='article' ? C.purple+'44' : pickerTab==='image' ? C.blue+'44' : C.green+'44', background: C.surface }}>
+          {/* Tab row */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {articles.length > 0 && <button onClick={() => setPickerTab('article')} style={{ background: pickerTab==='article' ? C.purple+'33' : 'transparent', color: pickerTab==='article' ? C.purple : C.muted, border: `1px solid ${pickerTab==='article' ? C.purple+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>📰 Pick Story</button>}
+            <button onClick={() => { setPickerTab('image'); loadDriveFiles() }} style={{ background: pickerTab==='image' ? C.blue+'33' : 'transparent', color: pickerTab==='image' ? C.blue : C.muted, border: `1px solid ${pickerTab==='image' ? C.blue+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🖼️ Pick Image</button>
+            {finalGames.length > 0 && <button onClick={() => setPickerTab('game')} style={{ background: pickerTab==='game' ? C.green+'33' : 'transparent', color: pickerTab==='game' ? C.green : C.muted, border: `1px solid ${pickerTab==='game' ? C.green+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🏈 Pick Game</button>}
           </div>
+
+          <PinEntry />
+
+          {/* STORY LIST */}
+          {pickerTab === 'article' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+              {articles.map(a => {
+                const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
+                const isFeatured = a.id === featuredArticle?.id
+                return (
+                  <div key={a.id} onClick={() => pickItem('article', a.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 7, cursor: 'pointer', background: isFeatured ? C.purple+'18' : C.card, border: `1px solid ${isFeatured ? C.purple+'55' : C.border}` }}>
+                    <span style={{ fontSize: 15, flexShrink: 0 }}>{meta.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: C.text, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title || meta.label}</div>
+                      <div style={{ color: C.muted, fontSize: 10 }}>{meta.label}{a.week ? ` · Week ${a.week}` : ''}</div>
+                    </div>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: isFeatured ? C.purple : C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isFeatured ? '📌 Featured' : 'Pin →'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* IMAGE LIST */}
+          {pickerTab === 'image' && (
+            <div>
+              {driveLoading && <div style={{ color: C.muted, fontSize: 13, padding: '8px 0' }}>⏳ Loading Drive images…</div>}
+              {driveError   && <div style={{ color: C.red,  fontSize: 13, padding: '8px 0' }}>❌ {driveError}</div>}
+              {\!driveLoading && driveFiles.length === 0 && \!driveError && <div style={{ color: C.muted, fontSize: 13 }}>No images found in Drive folder.</div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                {driveFiles.map(f => {
+                  const isActive = f.id === heroImageId
+                  return (
+                    <div key={f.id} onClick={() => pickItem('image', f)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: isActive ? C.blue+'18' : C.card, border: `1px solid ${isActive ? C.blue+'55' : C.border}` }}>
+                      <div style={{ width: 44, height: 30, borderRadius: 4, overflow: 'hidden', flexShrink: 0, background: C.border }}>
+                        <img src={`/api/drive-image?id=${f.id}&mime=${encodeURIComponent(f.mimeType)}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display='none' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: C.text, fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                        <div style={{ color: C.muted, fontSize: 10 }}>{new Date(f.createdTime).toLocaleDateString()}</div>
+                      </div>
+                      <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: isActive ? C.blue : C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isActive ? '✓ Active' : 'Set →'}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {heroImageId && <button onClick={() => pickItem('image', { id: null, mimeType: null })} style={{ marginTop: 8, background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 5, padding: '4px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10 }}>Remove Image</button>}
+            </div>
+          )}
+
+          {/* GAME LIST */}
+          {pickerTab === 'game' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+              {[...finalGames].reverse().map(g => {
+                const isActive = g.id === featuredGame?.id
+                const homeWon  = g.home_score > g.away_score
+                return (
+                  <div key={g.id} onClick={() => pickItem('game', g.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 7, cursor: 'pointer', background: isActive ? C.green+'12' : C.card, border: `1px solid ${isActive ? C.green+'55' : C.border}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: homeWon ? C.text : C.muted, fontSize: 13, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{g.home_team}</span>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 14 }}>{g.home_score}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                        <span style={{ color: \!homeWon ? C.text : C.muted, fontSize: 13, fontWeight: \!homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{g.away_team}</span>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", color: \!homeWon ? C.accent : C.muted, fontSize: 14 }}>{g.away_score}</span>
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 9, marginTop: 3, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase' }}>Week {g.week} · Final{g.game_type && g.game_type \!== 'regular' ? ' · '+g.game_type.replace(/_/g,' ') : ''}</div>
+                    </div>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: isActive ? C.green : C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isActive ? '✓ Shown' : 'Show →'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── HERO ROW: Article (left) + Game Score (right) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.55fr 1fr', gap: 20, marginBottom: 24, alignItems: 'stretch' }}>
+
+        {/* LEFT: Featured Article Hero */}
+        {featuredArticle ? (() => {
+          const meta    = ARTICLE_TYPE_LABELS[featuredArticle.article_type] || { label: featuredArticle.article_type, icon: '📄' }
+          const preview = (featuredArticle.content || '').replace(/[#*`_]/g, '').slice(0, 320).trim()
+          return (
+            <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderLeft: `3px solid ${C.purple}` }}>
+              {/* Hero image */}
+              {heroImageSrc && (
+                <div style={{ width: '100%', height: isMobile ? 180 : 220, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+                  <img src={heroImageSrc} alt="Featured" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.target.parentElement.style.display='none' }} />
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(to bottom, transparent, ' + C.card + ')' }} />
+                </div>
+              )}
+              <div style={{ padding: isMobile ? '16px' : '22px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 14 }}>{meta.icon}</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.purple, letterSpacing: 3, textTransform: 'uppercase' }}>📰 Featured Story</span>
+                  {featuredArticle.week && <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1, marginLeft: 'auto' }}>Week {featuredArticle.week}</span>}
+                </div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: 12 }}>
+                  {featuredArticle.title || meta.label}
+                </div>
+                <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, flex: 1 }}>
+                  {preview}{preview.length >= 320 ? '…' : ''}
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <a href="/media-center" style={{ color: C.purple, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none' }}>Read Full Article →</a>
+                </div>
+              </div>
+            </Card>
+          )
+        })() : (
+          <Card style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', borderStyle: 'dashed', minHeight: 200 }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>📰</div>
+            <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', lineHeight: 1.6 }}>Articles from Media Center will appear here.<br />Use "📰 Story" above to pick one.</div>
+            <a href="/media-center" style={{ marginTop: 14, color: C.accent, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none' }}>Go to Media Center →</a>
+          </Card>
+        )}
+
+        {/* RIGHT: Featured Game Scoreboard */}
+        {featuredGame ? (
+          <Card style={{
+            background: 'linear-gradient(160deg, #12121a 0%, #0c0c13 100%)',
+            borderLeft: `4px solid ${C.accent}`, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Game header */}
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>
+                {featuredGame.game_type && featuredGame.game_type \!== 'regular' ? featuredGame.game_type.replace(/_/g,' ').toUpperCase() : `Week ${featuredGame.week}`}
+              </span>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, background: C.accent+'22', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 3, padding: '2px 10px', letterSpacing: 2 }}>FINAL</span>
+            </div>
+            {/* Scores */}
+            <div style={{ padding: '20px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+              {/* Home */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: fgHomeWon ? 1 : 0.45 }}>
+                <div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 180 }}>{featuredGame.home_team}</div>
+                  {fgHomeWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                </div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgHomeWon ? C.accent : '#3a3a4a', lineHeight: 1 }}>{featuredGame.home_score}</div>
+              </div>
+              {/* Divider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 3 }}>VS</span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+              </div>
+              {/* Away */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: fgAwayWon ? 1 : 0.45 }}>
+                <div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 180 }}>{featuredGame.away_team}</div>
+                  {fgAwayWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                </div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgAwayWon ? C.accent : '#3a3a4a', lineHeight: 1 }}>{featuredGame.away_score}</div>
+              </div>
+            </div>
+            <div style={{ padding: '10px 20px', borderTop: `1px solid ${C.border}` }}>
+              <button onClick={() => setTab('Season')} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, padding: '5px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>See All Scores →</button>
+            </div>
+          </Card>
         ) : (
-          <Card style={{ textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed', borderColor: C.border }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🏟️</div>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.muted, letterSpacing: 1 }}>No Results Yet</div>
-            <div style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>Sync your first game screenshot to see scores here</div>
+          <Card style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', borderStyle: 'dashed', minHeight: 200 }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🏈</div>
+            <div style={{ color: C.muted, fontSize: 13, textAlign: 'center' }}>Use "🏈 Game" above to pin a game score here.</div>
           </Card>
         )}
       </div>
 
-      {/* ── THREE-COLUMN CONTENT GRID ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '280px 1fr 260px',
-        gap: 20, marginBottom: 24,
-        alignItems: 'start',
-      }}>
+      {/* ── THREE COLUMNS: Top Teams | Recent Articles | Stat Leaders ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr 240px', gap: 20, marginBottom: 24, alignItems: 'start' }}>
 
-        {/* LEFT: Top Teams */}
+        {/* TOP TEAMS */}
         <div>
           <SectionLabel color={C.accent}>Top Teams</SectionLabel>
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {teams.length === 0 ? (
-              <div style={{ padding: '20px 16px', color: C.muted, fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>
-                Sync standings to see your power rankings
-              </div>
-            ) : (
-              rankedTeams.slice(0, 8).map((t, i) => (
-                <div key={t.id} style={{
-                  display: 'flex', alignItems: 'center',
-                  padding: '11px 14px',
-                  borderBottom: i < Math.min(rankedTeams.length, 8) - 1 ? `1px solid ${C.border}` : 'none',
-                  background: i === 0 ? C.accent + '09' : 'transparent',
-                  gap: 10,
-                }}>
-                  <div style={{
-                    width: 24, flexShrink: 0, textAlign: 'center',
-                    fontFamily: "'Oswald', sans-serif",
-                    fontSize: i === 0 ? 20 : 15,
-                    color: i === 0 ? C.accent : C.muted,
-                    fontWeight: 700, lineHeight: 1,
-                  }}>{t.rank ?? (i + 1)}</div>
+            {teams.length === 0
+              ? <div style={{ padding: '20px 16px', color: C.muted, fontSize: 13, textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>Sync standings to see rankings</div>
+              : rankedTeams.slice(0, 8).map((t, i) => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '11px 14px', borderBottom: i < Math.min(rankedTeams.length,8)-1 ? `1px solid ${C.border}` : 'none', background: i===0 ? C.accent+'09' : 'transparent', gap: 10 }}>
+                  <div style={{ width: 24, flexShrink: 0, textAlign: 'center', fontFamily: "'Oswald', sans-serif", fontSize: i===0?20:15, color: i===0?C.accent:C.muted, fontWeight: 700 }}>{t.rank ?? i+1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: C.text, fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
                     <div style={{ color: C.muted, fontSize: 11 }}>{t.coach || 'No coach'}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.text }}>{t.wins}-{t.losses}</div>
-                    {t.streak && t.streak !== 'unknown' && t.streak !== '—' && /^[WL]\d+$/.test(t.streak) && (
-                      <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
-                    )}
+                    {t.streak && t.streak \!== 'unknown' && /^[WL]\d+$/.test(t.streak) && <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>}
                   </div>
                 </div>
               ))
-            )}
+            }
           </Card>
         </div>
 
-        {/* CENTER: Dynasty News — articles */}
+        {/* RECENT ARTICLES */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <SectionLabel color={C.purple}>Dynasty News</SectionLabel>
-            {/* Commissioner buttons */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexShrink: 0 }}>
-              {articles.length > 0 && (
-                <button onClick={() => openPicker('article')} style={{
-                  background: (showPicker && pickerTab === 'article') ? C.purple + '33' : 'transparent',
-                  color: (showPicker && pickerTab === 'article') ? C.purple : C.muted,
-                  border: `1px solid ${(showPicker && pickerTab === 'article') ? C.purple + '66' : C.border}`,
-                  borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
-                  fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-                }}>📌 Story</button>
-              )}
-              <button onClick={() => openPicker('image')} style={{
-                background: (showPicker && pickerTab === 'image') ? C.blue + '33' : 'transparent',
-                color: (showPicker && pickerTab === 'image') ? C.blue : C.muted,
-                border: `1px solid ${(showPicker && pickerTab === 'image') ? C.blue + '66' : C.border}`,
-                borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
-                fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-              }}>🖼️ Image</button>
-            </div>
-          </div>
-
-          {/* ── Commissioner Picker Panel ── */}
-          {showPicker && (
-            <Card style={{ marginBottom: 14, padding: '14px 16px', borderColor: pickerTab === 'image' ? C.blue + '44' : C.purple + '44', background: C.surface }}>
-
-              {/* Tab switcher inside panel */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                {articles.length > 0 && (
-                  <button onClick={() => setPickerTab('article')} style={{
-                    background: pickerTab === 'article' ? C.purple + '33' : 'transparent',
-                    color: pickerTab === 'article' ? C.purple : C.muted,
-                    border: `1px solid ${pickerTab === 'article' ? C.purple + '55' : C.border}`,
-                    borderRadius: 5, padding: '4px 12px', cursor: 'pointer',
-                    fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-                  }}>📌 Pick Story</button>
-                )}
-                <button onClick={() => { setPickerTab('image'); loadDriveFiles() }} style={{
-                  background: pickerTab === 'image' ? C.blue + '33' : 'transparent',
-                  color: pickerTab === 'image' ? C.blue : C.muted,
-                  border: `1px solid ${pickerTab === 'image' ? C.blue + '55' : C.border}`,
-                  borderRadius: 5, padding: '4px 12px', cursor: 'pointer',
-                  fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-                }}>🖼️ Pick Image</button>
-              </div>
-
-              {/* PIN entry */}
-              {showPinEntry && (
-                <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    type="password"
-                    placeholder="Commissioner PIN"
-                    value={pickerPin}
-                    onChange={e => setPickerPin(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-                    style={{
-                      flex: 1, minWidth: 140, background: C.card,
-                      border: `1px solid ${pinError ? C.red : C.border}`,
-                      borderRadius: 6, padding: '8px 12px',
-                      color: C.text, fontSize: 13, fontFamily: "'Lato', sans-serif",
-                    }}
-                  />
-                  <button onClick={handlePinSubmit} disabled={!!(pinningId || savingImage)} style={{
-                    background: pickerTab === 'image' ? C.blue : C.purple, color: '#fff',
-                    border: 'none', borderRadius: 6, padding: '8px 16px',
-                    cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12,
-                  }}>Confirm</button>
-                  {pinError && <span style={{ color: C.red, fontSize: 12, width: '100%' }}>❌ {pinError}</span>}
-                </div>
-              )}
-
-              {/* ARTICLE LIST */}
-              {pickerTab === 'article' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
-                  {articles.map(a => {
-                    const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
-                    const isFeatured = a.id === featuredArticle?.id
-                    const isPinning  = pinningId === a.id
-                    return (
-                      <div key={a.id} onClick={() => !isPinning && handlePickArticle(a.id)} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '9px 12px', borderRadius: 7, cursor: isPinning ? 'wait' : 'pointer',
-                        background: isFeatured ? C.purple + '18' : C.card,
-                        border: `1px solid ${isFeatured ? C.purple + '55' : C.border}`,
-                        transition: 'all 0.1s',
-                      }}>
-                        <span style={{ fontSize: 16, flexShrink: 0 }}>{meta.icon}</span>
+          <SectionLabel color={C.purple}>More Stories</SectionLabel>
+          {otherArticles.length === 0
+            ? <Card style={{ padding: '24px 16px', textAlign: 'center', borderStyle: 'dashed' }}><div style={{ fontSize: 28, marginBottom: 8 }}>📰</div><div style={{ color: C.muted, fontSize: 13 }}>More articles will appear here</div></Card>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {otherArticles.map(a => {
+                  const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
+                  const snippet = (a.content || '').replace(/[#*`_]/g,'').slice(0,140).trim()
+                  return (
+                    <Card key={a.id} style={{ padding: '14px 16px', borderLeft: `3px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{meta.icon}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ color: C.text, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title || meta.label}</div>
-                          <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>{meta.label}{a.week ? ` · Week ${a.week}` : ''}</div>
+                          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 3 }}>{meta.label}{a.week ? ` · Wk ${a.week}` : ''}</div>
+                          <div style={{ color: C.text, fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{a.title || meta.label}</div>
+                          <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.55 }}>{snippet}{snippet.length>=140?'…':''}</div>
+                          <a href="/media-center" style={{ display: 'inline-block', marginTop: 8, color: C.purple, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', textDecoration: 'none' }}>Read →</a>
                         </div>
-                        {isFeatured
-                          ? <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.purple, letterSpacing: 1.5, textTransform: 'uppercase', flexShrink: 0 }}>📌 Featured</span>
-                          : <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isPinning ? '⏳' : 'Pin →'}</span>
-                        }
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* IMAGE LIST */}
-              {pickerTab === 'image' && (
-                <div>
-                  {driveLoading && <div style={{ color: C.muted, fontSize: 13, padding: '12px 0' }}>⏳ Loading Drive images…</div>}
-                  {driveError  && <div style={{ color: C.red,  fontSize: 13, padding: '8px 0' }}>❌ {driveError}</div>}
-                  {!driveLoading && driveFiles.length === 0 && !driveError && (
-                    <div style={{ color: C.muted, fontSize: 13, padding: '12px 0' }}>No image files found in your Drive folder.</div>
-                  )}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
-                    {driveFiles.map(f => {
-                      const isActive = f.id === heroImageId
-                      const isSaving = savingImage && pendingAction?.payload?.id === f.id
-                      return (
-                        <div key={f.id} onClick={() => !isSaving && handlePickImage(f)} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '9px 12px', borderRadius: 7, cursor: isSaving ? 'wait' : 'pointer',
-                          background: isActive ? C.blue + '18' : C.card,
-                          border: `1px solid ${isActive ? C.blue + '55' : C.border}`,
-                          transition: 'all 0.1s',
-                        }}>
-                          {/* Mini preview */}
-                          <div style={{
-                            width: 44, height: 32, borderRadius: 4, flexShrink: 0,
-                            background: C.border, overflow: 'hidden',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <img
-                              src={`/api/drive-image?id=${f.id}&mime=${encodeURIComponent(f.mimeType)}`}
-                              alt=""
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={e => { e.target.style.display = 'none' }}
-                            />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: C.text, fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                            <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>{new Date(f.createdTime).toLocaleDateString()}</div>
-                          </div>
-                          {isActive
-                            ? <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.blue, letterSpacing: 1.5, textTransform: 'uppercase', flexShrink: 0 }}>✓ Active</span>
-                            : <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isSaving ? '⏳' : 'Set →'}</span>
-                          }
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {heroImageId && (
-                    <button onClick={() => commPin ? saveSettings({ hero_image_id: null, hero_image_mime: null }, commPin) : (setPendingAction({ type: 'image', payload: { id: null, mimeType: null } }), setShowPinEntry(true))} style={{
-                      marginTop: 10, background: 'transparent', color: C.red,
-                      border: `1px solid ${C.red}44`, borderRadius: 5, padding: '5px 12px',
-                      cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1,
-                    }}>Remove Image</button>
-                  )}
-                </div>
-              )}
-            </Card>
-          )}
-
-          {/* ── Featured Article ── */}
-          {featuredArticle ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Main featured card */}
-              {(() => {
-                const meta = ARTICLE_TYPE_LABELS[featuredArticle.article_type] || { label: featuredArticle.article_type, icon: '📄' }
-                // Show first ~300 chars of content as preview
-                const preview = (featuredArticle.content || '').replace(/[#*`_]/g, '').slice(0, 280).trim()
-                return (
-                  <Card style={{
-                    padding: 0, overflow: 'hidden',
-                    borderLeft: `3px solid ${C.purple}`,
-                    background: C.purple + '07',
-                  }}>
-                    {/* Hero image banner */}
-                    {heroImageSrc && (
-                      <div style={{ width: '100%', height: 160, overflow: 'hidden', position: 'relative' }}>
-                        <img
-                          src={heroImageSrc}
-                          alt="Featured story image"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                          onError={e => { e.target.parentElement.style.display = 'none' }}
-                        />
-                        {/* Gradient fade at bottom */}
-                        <div style={{
-                          position: 'absolute', bottom: 0, left: 0, right: 0, height: 60,
-                          background: 'linear-gradient(to bottom, transparent, ' + C.card + ')',
-                        }} />
-                      </div>
-                    )}
-                    <div style={{ padding: '14px 18px 18px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 16 }}>{meta.icon}</span>
-                        <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.purple, letterSpacing: 3, textTransform: 'uppercase' }}>
-                          📰 Featured Story
-                        </span>
-                        {featuredArticle.week && (
-                          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1, marginLeft: 'auto' }}>
-                            Week {featuredArticle.week}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ color: C.text, fontSize: 15, fontWeight: 700, lineHeight: 1.35, marginBottom: 8 }}>
-                        {featuredArticle.title || meta.label}
-                      </div>
-                      <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.65 }}>
-                        {preview}{preview.length >= 280 ? '…' : ''}
-                      </div>
-                      <div style={{ marginTop: 12 }}>
-                        <a href="/media-center" style={{
-                          color: C.purple, fontSize: 11,
-                          fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5,
-                          textTransform: 'uppercase', textDecoration: 'none',
-                        }}>Read Full Article →</a>
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })()}
-
-              {/* Other recent articles (compact) */}
-              {otherArticles.map((a, i) => {
-                const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
-                return (
-                  <Card key={a.id} style={{ padding: '12px 16px', borderLeft: `3px solid ${C.border}` }}>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{meta.icon}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 3 }}>{meta.label}{a.week ? ` · Wk ${a.week}` : ''}</div>
-                        <div style={{ color: C.text, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{a.title || meta.label}</div>
-                      </div>
-                      <a href="/media-center" style={{ color: C.muted, fontSize: 11, flexShrink: 0, textDecoration: 'none', fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>→</a>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-          ) : (
-            <Card style={{ padding: '30px 20px', textAlign: 'center', borderStyle: 'dashed', borderColor: C.border }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>📰</div>
-              <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
-                Articles from the Media Center will appear here once published
+                    </Card>
+                  )
+                })}
               </div>
-              <a href="/media-center" style={{ display: 'inline-block', marginTop: 12, color: C.accent, fontSize: 12, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', textDecoration: 'none' }}>
-                Go to Media Center →
-              </a>
-            </Card>
-          )}
+          }
         </div>
 
-        {/* RIGHT: Stat Leaders */}
+        {/* STAT LEADERS */}
         <div>
           <SectionLabel color={C.green}>Stat Leaders</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {players.length === 0 ? (
-              <Card style={{ padding: '24px 16px', textAlign: 'center' }}>
-                <div style={{ fontSize: 36, marginBottom: 10 }}>⭐</div>
-                <div style={{ color: C.muted, fontSize: 13 }}>Sync player stats to see leaders</div>
-              </Card>
-            ) : (
-              [
-                { label: 'Passing',   icon: '🎯', player: topPasser,   stat: topPasser?.stats?.pass_yds,   color: C.blue   },
-                { label: 'Rushing',   icon: '💨', player: topRusher,   stat: topRusher?.stats?.rush_yds,   color: C.green  },
-                { label: 'Receiving', icon: '🙌', player: topReceiver, stat: topReceiver?.stats?.rec_yds,  color: C.purple },
-              ].filter(x => x.player).map(x => (
-                <Card key={x.label} style={{ padding: '14px 16px', borderLeft: `3px solid ${x.color}` }}>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: x.color, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>
-                    {x.icon} {x.label}
-                  </div>
-                  <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.player.name}</div>
-                  <div style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>{x.player.team}</div>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 28 : 32, color: x.color, lineHeight: 1 }}>
-                    {x.stat?.toLocaleString()}
-                    <span style={{ fontSize: 11, color: C.muted, marginLeft: 5, fontFamily: "'Lato', sans-serif", fontWeight: 400 }}>YDS</span>
-                  </div>
-                </Card>
-              ))
-            )}
+            {players.length === 0
+              ? <Card style={{ padding: '24px 16px', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div><div style={{ color: C.muted, fontSize: 13 }}>Sync player stats to see leaders</div></Card>
+              : [
+                  { label: 'Passing',   icon: '🎯', player: topPasser,   stat: topPasser?.stats?.pass_yds,  color: C.blue   },
+                  { label: 'Rushing',   icon: '💨', player: topRusher,   stat: topRusher?.stats?.rush_yds,  color: C.green  },
+                  { label: 'Receiving', icon: '🙌', player: topReceiver, stat: topReceiver?.stats?.rec_yds, color: C.purple },
+                ].filter(x => x.player).map(x => (
+                  <Card key={x.label} style={{ padding: '14px 16px', borderLeft: `3px solid ${x.color}` }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: x.color, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>{x.icon} {x.label}</div>
+                    <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.player.name}</div>
+                    <div style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>{x.player.team}</div>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 30, color: x.color, lineHeight: 1 }}>
+                      {x.stat?.toLocaleString()}<span style={{ fontSize: 11, color: C.muted, marginLeft: 4 }}>YDS</span>
+                    </div>
+                  </Card>
+                ))
+            }
           </div>
         </div>
       </div>
 
-      {/* ── RECENT SYNCS (compact, only if data exists) ── */}
+      {/* RECENT SYNCS */}
       {scanLog?.length > 0 && (
         <div>
           <SectionLabel color={C.blue}>Recent Syncs</SectionLabel>
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {scanLog.slice(0, 5).map((log, i) => (
-              <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 16px',
-                borderBottom: i < Math.min(scanLog.length, 5) - 1 ? `1px solid ${C.border}` : 'none',
-                flexWrap: 'wrap', gap: 6,
-              }}>
+            {scanLog.slice(0, 4).map((log, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none', flexWrap: 'wrap', gap: 6 }}>
                 <span style={{ color: C.text, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 300 }}>{log.file_name}</span>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
                   {log.data_type && <Badge color={C.blue}>{log.data_type}</Badge>}
