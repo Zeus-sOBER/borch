@@ -16,7 +16,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const TABS = ['Dashboard', 'Standings', 'Season', 'Stats', 'Media', 'Sync']
+const TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Stats', 'Media', 'Sync']
 
 // ── Responsive hook ────────────────────────────────────────────
 function useMobile() {
@@ -94,6 +94,7 @@ const NAV_ITEMS = [
   { id: 'Dashboard', icon: '🏠', label: 'Home' },
   { id: 'Standings', icon: '📊', label: 'Standings' },
   { id: 'Season',    icon: '📅', label: 'Season' },
+  { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
   { id: 'Stats',     icon: '⭐', label: 'Stats' },
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
@@ -196,7 +197,7 @@ const ARTICLE_TYPE_LABELS = {
   'rivalry-breakdown': { label: 'Rivalry Breakdown', icon: '🔥' },
 }
 
-function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin }) {
+function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen }) {
   const finalGames  = games.filter(g => g.status === 'Final' || g.is_final)
   const currentWeek = settings?.current_week ?? 0
 
@@ -418,7 +419,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           const meta    = ARTICLE_TYPE_LABELS[featuredArticle.article_type] || { label: featuredArticle.article_type, icon: '📄' }
           const preview = (featuredArticle.content || '').replace(/[#*`_]/g, '').slice(0, 320).trim()
           return (
-            <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderLeft: `3px solid ${C.purple}` }}>
+            <Card onClick={() => onArticleOpen && onArticleOpen(featuredArticle)} style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderLeft: `3px solid ${C.purple}`, cursor: 'pointer' }}>
               {/* Hero image */}
               {heroImageSrc && (
                 <div style={{ width: '100%', height: isMobile ? 180 : 220, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
@@ -439,7 +440,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                   {preview}{preview.length >= 320 ? '…' : ''}
                 </div>
                 <div style={{ marginTop: 16 }}>
-                  <a href="/media-center" style={{ color: C.purple, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none' }}>Read Full Article →</a>
+                  <span style={{ color: C.purple, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase' }}>Read Full Story →</span>
                 </div>
               </div>
             </Card>
@@ -447,8 +448,8 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
         })() : (
           <Card style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', borderStyle: 'dashed', minHeight: 200 }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📰</div>
-            <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', lineHeight: 1.6 }}>Articles from Media Center will appear here.<br />Use "📰 Story" above to pick one.</div>
-            <a href="/media-center" style={{ marginTop: 14, color: C.accent, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none' }}>Go to Media Center →</a>
+            <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', lineHeight: 1.6 }}>Stories from the Media tab will appear here.<br />Use "📰 Story" above to pin one.</div>
+            <button onClick={() => setTab('Media')} style={{ marginTop: 14, background: 'transparent', border: 'none', color: C.accent, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', padding: 0 }}>Go to Media Tab →</button>
           </Card>
         )}
 
@@ -532,20 +533,23 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
         <div>
           <SectionLabel color={C.purple}>More Stories</SectionLabel>
           {otherArticles.length === 0
-            ? <Card style={{ padding: '24px 16px', textAlign: 'center', borderStyle: 'dashed' }}><div style={{ fontSize: 28, marginBottom: 8 }}>📰</div><div style={{ color: C.muted, fontSize: 13 }}>More articles will appear here</div></Card>
+            ? <Card style={{ padding: '24px 16px', textAlign: 'center', borderStyle: 'dashed' }}><div style={{ fontSize: 28, marginBottom: 8 }}>📰</div><div style={{ color: C.muted, fontSize: 13 }}>More stories will appear here</div></Card>
             : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {otherArticles.map(a => {
                   const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
                   const snippet = (a.content || '').replace(/[#*`_]/g,'').slice(0,140).trim()
                   return (
-                    <Card key={a.id} style={{ padding: '14px 16px', borderLeft: `3px solid ${C.border}` }}>
+                    <Card key={a.id} onClick={() => onArticleOpen && onArticleOpen(a)} style={{ padding: '14px 16px', borderLeft: `3px solid ${C.purple}44`, cursor: 'pointer', transition: 'border-color 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.borderLeftColor = C.purple}
+                      onMouseLeave={e => e.currentTarget.style.borderLeftColor = C.purple + '44'}
+                    >
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                         <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{meta.icon}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 3 }}>{meta.label}{a.week ? ` · Wk ${a.week}` : ''}</div>
                           <div style={{ color: C.text, fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{a.title || meta.label}</div>
                           <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.55 }}>{snippet}{snippet.length>=140?'…':''}</div>
-                          <a href="/media-center" style={{ display: 'inline-block', marginTop: 8, color: C.purple, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', textDecoration: 'none' }}>Read →</a>
+                          <span style={{ display: 'inline-block', marginTop: 8, color: C.purple, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase' }}>Read →</span>
                         </div>
                       </div>
                     </Card>
@@ -579,6 +583,67 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           </div>
         </div>
       </div>
+
+      {/* ── NEXT MATCHUP PREVIEW ── */}
+      {(() => {
+        const upcoming = games.filter(g => !g.is_final && g.status !== 'Final' && g.home_team && g.away_team)
+        if (upcoming.length === 0) return null
+        const g = upcoming[0]
+        const finalGs = games.filter(x => x.is_final || x.status === 'Final')
+        const h2h = finalGs.filter(x =>
+          (x.home_team === g.home_team && x.away_team === g.away_team) ||
+          (x.home_team === g.away_team && x.away_team === g.home_team)
+        ).sort((a, b) => b.week - a.week)
+        let homeH2H = 0, awayH2H = 0
+        h2h.forEach(m => {
+          const hw = m.home_score > m.away_score
+          if ((m.home_team === g.home_team && hw) || (m.away_team === g.home_team && !hw)) homeH2H++
+          else awayH2H++
+        })
+        const homeTeam = teams.find(t => t.name === g.home_team)
+        const awayTeam = teams.find(t => t.name === g.away_team)
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <SectionLabel color={C.accent}>Next Matchup</SectionLabel>
+            <Card style={{ padding: 0, overflow: 'hidden', borderLeft: `3px solid ${C.accent}` }}>
+              <div style={{ padding: '10px 18px', borderBottom: `1px solid ${C.border}`, background: C.surface, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>Week {g.week} · Upcoming</span>
+                <button onClick={() => setTab('Matchups')} style={{ background: 'transparent', border: 'none', color: C.accent, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', padding: 0 }}>Full Preview →</button>
+              </div>
+              <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {/* Home */}
+                <div style={{ flex: 1, minWidth: 100 }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text }}>{g.home_team}</div>
+                  {homeTeam && <div style={{ color: C.muted, fontSize: 11 }}>{homeTeam.wins}-{homeTeam.losses}</div>}
+                </div>
+                {/* VS + H2H */}
+                <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.muted, fontWeight: 700 }}>VS</div>
+                  {h2h.length > 0 && (
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>
+                      H2H: <span style={{ color: homeH2H > awayH2H ? C.green : C.muted }}>{homeH2H}</span>–<span style={{ color: awayH2H > homeH2H ? C.green : C.muted }}>{awayH2H}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Away */}
+                <div style={{ flex: 1, minWidth: 100, textAlign: isMobile ? 'left' : 'right' }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text }}>{g.away_team}</div>
+                  {awayTeam && <div style={{ color: C.muted, fontSize: 11 }}>{awayTeam.wins}-{awayTeam.losses}</div>}
+                </div>
+              </div>
+              {h2h.length > 0 && (() => {
+                const last = h2h[0]
+                const hw = last.home_score > last.away_score
+                return (
+                  <div style={{ padding: '8px 18px', borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted }}>
+                    Last meeting Wk {last.week}: <span style={{ color: hw ? C.text : C.muted, fontWeight: hw ? 700 : 400 }}>{last.home_team} {last.home_score}</span> – <span style={{ color: !hw ? C.text : C.muted, fontWeight: !hw ? 700 : 400 }}>{last.away_team} {last.away_score}</span>
+                  </div>
+                )
+              })()}
+            </Card>
+          </div>
+        )
+      })()}
 
       {/* RECENT SYNCS */}
       {scanLog?.length > 0 && (
@@ -1334,6 +1399,103 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   )
 }
 
+// ── Article Slide-Up Panel ────────────────────────────────────
+function ArticleSlideUp({ article, onClose, isMobile }) {
+  useEffect(() => {
+    if (article) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [article])
+
+  if (!article) return null
+
+  const meta = ARTICLE_TYPE_LABELS[article.article_type] || { label: article.article_type, icon: '📄' }
+
+  // Render simple markdown-ish content
+  const formatInline = (text) => {
+    const parts = (text || '').split(/(\*\*[^*]+\*\*)/)
+    return parts.map((p, i) =>
+      p.startsWith('**') && p.endsWith('**')
+        ? <strong key={i} style={{ color: C.text, fontWeight: 700 }}>{p.slice(2, -2)}</strong>
+        : p
+    )
+  }
+
+  const renderContent = (text) => {
+    return (text || '').split('\n').map((line, i) => {
+      if (!line.trim()) return <div key={i} style={{ height: 10 }} />
+      if (line.startsWith('### ')) return <h3 key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, margin: '18px 0 6px', textTransform: 'uppercase', letterSpacing: 1.5 }}>{line.slice(4)}</h3>
+      if (line.startsWith('## '))  return <h2 key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: 19, color: C.text, margin: '22px 0 8px', fontWeight: 700 }}>{line.slice(3)}</h2>
+      if (line.startsWith('# '))   return <h1 key={i} style={{ fontFamily: "'Oswald', sans-serif", fontSize: 24, color: C.text, margin: '24px 0 10px', fontWeight: 700 }}>{line.slice(2)}</h1>
+      if (line.match(/^[-*] /)) return (
+        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, paddingLeft: 8 }}>
+          <span style={{ color: C.accent, flexShrink: 0, marginTop: 2 }}>·</span>
+          <span style={{ color: C.muted, fontSize: 14, lineHeight: 1.75 }}>{formatInline(line.slice(2))}</span>
+        </div>
+      )
+      return <p key={i} style={{ color: C.muted, fontSize: 14, lineHeight: 1.85, margin: '0 0 12px' }}>{formatInline(line)}</p>
+    })
+  }
+
+  const copyText = () => {
+    const txt = `${article.title || meta.label}\n\n${(article.content || '').replace(/[#*`_]/g, '')}`
+    navigator.clipboard?.writeText(txt).catch(() => {})
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 400, backdropFilter: 'blur(3px)' }}
+      />
+      {/* Panel */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        height: isMobile ? '93vh' : '86vh',
+        background: C.surface,
+        borderTop: `3px solid ${C.purple}`,
+        borderRadius: '18px 18px 0 0',
+        zIndex: 401,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'articleSlideUp 0.28s cubic-bezier(0.22,1,0.36,1)',
+      }}>
+        <style>{`@keyframes articleSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+
+        {/* Header */}
+        <div style={{ padding: isMobile ? '14px 16px' : '16px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', gap: 12, flexShrink: 0, background: C.surface }}>
+          <span style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{meta.icon}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.purple, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 4 }}>
+              {meta.label}{article.week ? ` · Week ${article.week}` : ''}
+            </div>
+            <div style={{ color: C.text, fontWeight: 700, fontSize: isMobile ? 16 : 20, lineHeight: 1.25 }}>
+              {article.title || meta.label}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={copyText} title="Copy article text" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 13px', cursor: 'pointer', color: C.muted, fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+              📋 <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>Copy</span>
+            </button>
+            <button onClick={onClose} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 13px', cursor: 'pointer', color: C.text, fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px 40px' : '28px 40px 48px', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ maxWidth: 700, margin: '0 auto' }}>
+            {renderContent(article.content)}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Week Controls (commissioner-only) ─────────────────────────
 function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh }) {
   const [saving, setSaving]           = useState(false)
@@ -1406,7 +1568,7 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
         📅 Season Week Controls
       </div>
       <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>
-        Set the official current week. The dashboard, AI articles, and narrative engine all use this as their anchor.
+        Set the official current week. The dashboard, articles, and narrative engine all use this as their anchor.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
@@ -1520,7 +1682,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
   const [typeHint, setTypeHint] = useState('auto')
 
   const TYPE_HINTS = [
-    { id: 'auto',        label: '✨ Auto-Detect',  desc: 'AI figures it out — works for any screenshot or doc' },
+    { id: 'auto',        label: '✨ Auto-Detect',  desc: 'Smart detection — works for any screenshot or doc' },
     { id: 'schedule',    label: '📅 Schedule',     desc: 'Full season schedule — imports upcoming matchups. Works with Google Docs, Sheets, or schedule screenshots.' },
     { id: 'standings',   label: '📊 Standings',    desc: 'Win/loss records, conference standings' },
     { id: 'scores',      label: '🏈 Scores',       desc: 'Scoreboards, game results' },
@@ -1769,7 +1931,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
                     width: isMobile ? '100%' : 'auto',
                   }}
                 >
-                  {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan with AI'}
+                  {result?.success ? '✅ Synced' : isParsing ? '⏳ Reading...' : '🔍 Scan & Import'}
                 </button>
               </div>
             </Card>
@@ -1782,10 +1944,207 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
         <ol style={{ color: C.muted, fontSize: 13, lineHeight: 2, margin: 0, paddingLeft: 20 }}>
           <li>Upload <strong style={{ color: C.text }}>any</strong> CFB26 screenshot or Google Doc to the shared Drive folder</li>
           <li>Hit <strong style={{ color: C.text }}>Refresh</strong> to see new files appear above</li>
-          <li>Click <strong style={{ color: C.text }}>Scan All New Files</strong> or <strong style={{ color: C.text }}>Scan with AI</strong> individually</li>
+          <li>Click <strong style={{ color: C.text }}>Scan All New Files</strong> or <strong style={{ color: C.text }}>Scan & Import</strong> individually</li>
           <li>Standings, scores, stats, recruiting, and championships update automatically</li>
         </ol>
       </Card>
+    </div>
+  )
+}
+
+// ── Matchups Tab ───────────────────────────────────────────────
+function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen }) {
+  const finalGames    = games.filter(g => g.is_final || g.status === 'Final')
+  const upcomingGames = games.filter(g => !g.is_final && g.status !== 'Final' && g.home_team && g.away_team)
+
+  const getH2H = (a, b) =>
+    finalGames
+      .filter(g => (g.home_team === a && g.away_team === b) || (g.home_team === b && g.away_team === a))
+      .sort((x, y) => y.week - x.week)
+
+  const getRecentGames = (name) =>
+    finalGames
+      .filter(g => g.home_team === name || g.away_team === name)
+      .sort((a, b) => b.week - a.week)
+      .slice(0, 4)
+
+  const findTeam = (name) => teams.find(t => t.name === name)
+
+  const FormBadge = ({ recentGs, teamName }) => (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {recentGs.map((m, i) => {
+        const isHome = m.home_team === teamName
+        const won = isHome ? m.home_score > m.away_score : m.away_score > m.home_score
+        return (
+          <span key={i} style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 24, height: 24, borderRadius: 5,
+            background: won ? C.green + '22' : C.red + '22',
+            color: won ? C.green : C.red,
+            fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+            border: `1px solid ${won ? C.green + '55' : C.red + '55'}`,
+          }}>{won ? 'W' : 'L'}</span>
+        )
+      })}
+    </div>
+  )
+
+  const GamePreviewCard = ({ g }) => {
+    const h2h = getH2H(g.home_team, g.away_team)
+    const homeRecent = getRecentGames(g.home_team)
+    const awayRecent = getRecentGames(g.away_team)
+    const homeTeam = findTeam(g.home_team)
+    const awayTeam = findTeam(g.away_team)
+
+    let homeH2HWins = 0, awayH2HWins = 0
+    h2h.forEach(m => {
+      const hw = m.home_score > m.away_score
+      if ((m.home_team === g.home_team && hw) || (m.away_team === g.home_team && !hw)) homeH2HWins++
+      else awayH2HWins++
+    })
+
+    return (
+      <Card style={{ marginBottom: 18, padding: 0, overflow: 'hidden' }}>
+        {/* Week label */}
+        <div style={{ padding: '10px 20px', borderBottom: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>Week {g.week}</span>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, background: C.accent + '18', border: `1px solid ${C.accent}33`, borderRadius: 3, padding: '2px 10px', letterSpacing: 2 }}>UPCOMING</span>
+        </div>
+
+        {/* Teams row */}
+        <div style={{ padding: '22px 20px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 120px 1fr', gap: isMobile ? 20 : 16, alignItems: 'center' }}>
+
+          {/* Home team */}
+          <div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{g.home_team}</div>
+            {homeTeam && (
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
+                {homeTeam.wins}-{homeTeam.losses}{homeTeam.coach ? ` · ${homeTeam.coach}` : ''}
+                {homeTeam.pts ? <span style={{ color: C.subtle }}> · {Math.round(homeTeam.pts / ((homeTeam.wins + homeTeam.losses) || 1))} ppg</span> : null}
+              </div>
+            )}
+            {homeRecent.length > 0 && (
+              <div>
+                <div style={{ fontSize: 8, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>Last {homeRecent.length}</div>
+                <FormBadge recentGs={homeRecent} teamName={g.home_team} />
+              </div>
+            )}
+          </div>
+
+          {/* Center: VS + H2H */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.subtle, fontWeight: 700, marginBottom: 10 }}>VS</div>
+            {h2h.length > 0 ? (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', display: 'inline-block' }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 7, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>All-Time Series</div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, lineHeight: 1 }}>
+                  <span style={{ color: homeH2HWins >= awayH2HWins ? C.green : C.muted }}>{homeH2HWins}</span>
+                  <span style={{ color: C.subtle }}> – </span>
+                  <span style={{ color: awayH2HWins > homeH2HWins ? C.green : C.muted }}>{awayH2HWins}</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 10, color: C.subtle, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>FIRST<br />MEETING</div>
+            )}
+          </div>
+
+          {/* Away team */}
+          <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{g.away_team}</div>
+            {awayTeam && (
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
+                {awayTeam.wins}-{awayTeam.losses}{awayTeam.coach ? ` · ${awayTeam.coach}` : ''}
+                {awayTeam.pts ? <span style={{ color: C.subtle }}> · {Math.round(awayTeam.pts / ((awayTeam.wins + awayTeam.losses) || 1))} ppg</span> : null}
+              </div>
+            )}
+            {awayRecent.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end' }}>
+                <div style={{ fontSize: 8, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>Last {awayRecent.length}</div>
+                <FormBadge recentGs={awayRecent} teamName={g.away_team} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* H2H recent meetings */}
+        {h2h.length > 0 && (
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 20px' }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Recent Meetings</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {h2h.slice(0, 3).map((m, i) => {
+                const hw = m.home_score > m.away_score
+                const winner = hw ? m.home_team : m.away_team
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12 }}>
+                    <span style={{ color: C.subtle, fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1, flexShrink: 0 }}>Wk {m.week}</span>
+                    <span style={{ color: hw ? C.text : C.muted, fontWeight: hw ? 700 : 400 }}>{m.home_team} {m.home_score}</span>
+                    <span style={{ color: C.subtle }}>–</span>
+                    <span style={{ color: !hw ? C.text : C.muted, fontWeight: !hw ? 700 : 400 }}>{m.away_team} {m.away_score}</span>
+                    <span style={{ color: C.accent, fontSize: 9, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, marginLeft: 'auto' }}>
+                      {winner === g.home_team ? g.home_team.split(' ')[0] : g.away_team.split(' ')[0]} won
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+    )
+  }
+
+  return (
+    <div>
+      <SectionTitle isMobile={isMobile} sub="Game previews — series history, current records, and recent form">Matchups</SectionTitle>
+
+      {/* Upcoming games */}
+      {upcomingGames.length === 0 ? (
+        <Card style={{ textAlign: 'center', padding: '48px 20px', borderStyle: 'dashed', marginBottom: 28 }}>
+          <div style={{ fontSize: 44, marginBottom: 14 }}>📅</div>
+          <div style={{ color: C.text, fontSize: 16, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, marginBottom: 8 }}>No Upcoming Matchups</div>
+          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
+            Sync a schedule from the Drive tab and upcoming<br />game cards will appear here automatically.
+          </div>
+        </Card>
+      ) : (
+        upcomingGames.map((g, i) => <GamePreviewCard key={`${g.home_team}-${g.away_team}-${g.week}-${i}`} g={g} />)
+      )}
+
+      {/* Stories */}
+      {articles.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 4, height: 18, background: C.purple, borderRadius: 2, flexShrink: 0 }} />
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>Latest Stories</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {articles.slice(0, 8).map(a => {
+              const meta = ARTICLE_TYPE_LABELS[a.article_type] || { label: a.article_type, icon: '📄' }
+              const snippet = (a.content || '').replace(/[#*`_]/g, '').slice(0, 130).trim()
+              return (
+                <Card
+                  key={a.id}
+                  onClick={() => onArticleOpen && onArticleOpen(a)}
+                  style={{ padding: '14px 16px', borderLeft: `3px solid ${C.purple}44`, cursor: 'pointer', transition: 'border-left-color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.borderLeftColor = C.purple}
+                  onMouseLeave={e => e.currentTarget.style.borderLeftColor = C.purple + '44'}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{meta.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.purple, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 3 }}>{meta.label}{a.week ? ` · Wk ${a.week}` : ''}</div>
+                      <div style={{ color: C.text, fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{a.title || meta.label}</div>
+                      <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6 }}>{snippet}{snippet.length >= 130 ? '…' : ''}</div>
+                    </div>
+                    <span style={{ color: C.muted, fontSize: 22, flexShrink: 0, alignSelf: 'center', marginLeft: 4 }}>›</span>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1799,6 +2158,7 @@ export default function App() {
   const [commPin, setCommPin] = useState(null)
   const [narrativeEntries, setNarrativeEntries] = useState([])
   const [articles, setArticles] = useState([])
+  const [openArticle, setOpenArticle] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -1916,9 +2276,10 @@ export default function App() {
           )
           : (
             <>
-              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={fetchArticles} commPin={commPin} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={fetchArticles} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
+              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} />}
               {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}
               {tab === 'Media'     && (
                 <MediaCenter
@@ -1946,6 +2307,9 @@ export default function App() {
 
       {/* Bottom nav — mobile only */}
       {isMobile && <BottomNav tab={tab} setTab={setTab} />}
+
+      {/* Article Slide-Up */}
+      <ArticleSlideUp article={openArticle} onClose={() => setOpenArticle(null)} isMobile={isMobile} />
     </>
   )
 }
