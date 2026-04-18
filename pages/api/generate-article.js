@@ -118,7 +118,7 @@ export default async function handler(req, res) {
       humanTeams.some(ht =>
         ht.toLowerCase() === g.home_team?.toLowerCase() ||
         ht.toLowerCase() === g.away_team?.toLowerCase()
-      )
+      ) && g.home_score !== null && g.away_score !== null  // Only include games that have been played
     );
 
     const regularGames = games.filter(g => !g.game_type || g.game_type === 'regular').slice(0, 15);
@@ -144,8 +144,9 @@ export default async function handler(req, res) {
         : (c.record || 'record unknown');
 
       const coachGames = games.filter(g =>
-        g.home_team?.toLowerCase() === c.team?.toLowerCase() ||
-        g.away_team?.toLowerCase() === c.team?.toLowerCase()
+        (g.home_team?.toLowerCase() === c.team?.toLowerCase() ||
+        g.away_team?.toLowerCase() === c.team?.toLowerCase()) &&
+        g.home_score !== null && g.away_score !== null  // Only played games
       ).slice(0, 5);
 
       const recentResults = coachGames.map(g => {
@@ -243,10 +244,11 @@ COLLEGE FOOTBALL SCHEDULE:
 ABSOLUTE RULES:
 1. Reference every coach by name at least once — they are the stars.
 2. Only write about the ${coaches.length} human-coached teams. CPU teams don't exist.
-3. Never invent stats, scores, or facts. Only use data provided.
-4. Adjust tone to match season phase — early = hopeful, late = urgent, playoff = electric.
-5. Reference championship history where relevant — it adds legacy and stakes.
-6. Tone: ESPN-professional with personality. Light rivalry trash talk welcome.
+3. NEVER invent stats, scores, or game results. Only use data explicitly provided below. If a game is not in the data, it has NOT been played — do not speculate or fabricate a score.
+4. If no games have been played yet for a given team or week, say so honestly — do not fill in fictional results.
+5. Adjust tone to match season phase — early = hopeful, late = urgent, playoff = electric.
+6. Reference championship history where relevant — it adds legacy and stakes.
+7. Tone: ESPN-professional with personality. Light rivalry trash talk welcome.
 
 THE ${coaches.length} COACHES IN THIS LEAGUE:
 ${coachProfiles}
