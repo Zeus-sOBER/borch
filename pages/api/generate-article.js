@@ -114,6 +114,13 @@ export default async function handler(req, res) {
     const { data: allGames } = await supabase
       .from('games').select('*').order('week', { ascending: false }).limit(60);
 
+    // Upcoming (unplayed) games — null scores, ordered soonest first
+    const { data: scheduledGames } = await supabase
+      .from('games').select('*')
+      .is('home_score', null).is('away_score', null)
+      .eq('is_final', false)
+      .order('week', { ascending: true }).limit(40);
+
     const games = (allGames || []).filter(g =>
       humanTeams.some(ht =>
         ht.toLowerCase() === g.home_team?.toLowerCase() ||
@@ -326,6 +333,102 @@ FORMAT:
 - "Dynasty Impact": what does this player mean for their coach's ${weekContext.isPlayoff ? 'playoff run' : 'championship hopes'}
 - Simulated coach quote (labeled clearly as simulated)`;
 
+    } else if (articleType === 'league-preview') {
+      // All upcoming games involving at least one human team
+      const upcomingHumanGames = (scheduledGames || []).filter(g =>
+        humanTeams.some(ht =>
+          ht.toLowerCase() === g.home_team?.toLowerCase() ||
+          ht.toLowerCase() === g.away_team?.toLowerCase()
+        )
+      )
+
+      // Build a detailed block per matchup
+      const matchupBlocks = upcomingHumanGames.slice(0, 10).map(g => {
+        const homeTeam  = teams.find(t => (t.name || t.team_name || '').toLowerCase() === g.home_team?.toLowerCase())
+        const awayTeam  = teams.find(t => (t.name || t.team_name || '').toLowerCase() === g.away_team?.toLowerCase())
+        const homeCoach = coaches.find(c => c.team?.toLowerCase() === g.home_team?.toLowerCase())
+        const awayCoach = coaches.find(c => c.team?.toLowerCase() === g.away_team?.toLowerCase())
+
+        // Head-to-head history
+        const h2h = (allGames || []).filter(x =>
+          x.home_score !== null && x.away_score !== null &&
+          ((x.home_team?.toLowerCase() === g.home_team?.toLowerCase() && x.away_team?.toLowerCase() === g.away_team?.toLowerCase()) ||
+           (x.home_team?.toLowerCase() === g.away_team?.toLowerCase() && x.away_team?.toLowerCase() === g.home_team?.toLowerCase()))
+        ).sort((a, b) => b.week - a.week)
+
+        let homeH2H = 0, awayH2H = 0
+        h2h.forEach(m => {
+          const hw = m.home_score > m.away_score
+          if ((m.home_team?.toLowerCase() === g.home_team?.toLowerCase() && hw) ||
+              (m.away_team?.toLowerCase() === g.home_team?.toLowerCase() && !hw)) homeH2H++
+          else awayH2H++
+        })
+
+        // Recent form (last 3 results as W/L)
+        const recentForm = (teamName) => (allGames || [])
+          .filter(x => x.home_score !== null && x.away_score !== null &&
+            (x.home_team?.toLowerCase() === teamName.toLowerCase() ||
+             x.away_team?.toLowerCase() === teamName.toLowerCase()))
+          .sort((a, b) => b.week - a.week).slice(0, 3)
+          .map(x => {
+            const isHome = x.home_team?.toLowerCase() === teamName.toLowerCase()
+            const myScore = isHome ? x.home_score : x.away_score
+            const oppScore = isHome ? x.away_score : x.home_score
+            return myScore > oppScore ? 'W' : 'L'
+          }).join('') || 'no games yet'
+
+        const gameWeek = g.week ?? 'unknown'
+        const gameLabel = g.game_type && g.game_type !== 'regular'
+          ? ` [${g.game_type.replace(/_/g, ' ')}]` : ''
+
+        const seriesSummary = h2h.length === 0
+          ? 'First meeting between these programs'
+          : homeH2H === awayH2H
+            ? `Series tied ${homeH2H}-${awayH2H}`
+            : `${homeH2H > awayH2H ? g.home_team : g.away_team} leads series ${Math.max(homeH2H, awayH2H)}-${Math.min(homeH2H, awayH2H)}`
+
+        const lastMeeting = h2h[0]
+          ? `Last meeting (Wk ${h2h[0].week}): ${h2h[0].home_team} ${h2h[0].home_score}–${h2h[0].away_score} ${h2h[0].away_team}`
+          : null
+
+        return [
+          `MATCHUP: Week ${gameWeek}${gameLabel} — ${g.home_team} vs ${g.away_team}`,
+          `  ${g.home_team} (${homeTeam ? `${homeTeam.wins}-${homeTeam.losses}` : 'record unknown'}${homeCoach ? `, Coach ${homeCoach.name}` : ''}) · Recent form: ${recentForm(g.home_team)}`,
+          `  ${g.away_team} (${awayTeam ? `${awayTeam.wins}-${awayTeam.losses}` : 'record unknown'}${awayCoach ? `, Coach ${awayCoach.name}` : ''}) · Recent form: ${recentForm(g.away_team)}`,
+          `  Series: ${seriesSummary}`,
+          lastMeeting ? `  ${lastMeeting}` : null,
+        ].filter(Boolean).join('\n')
+      }).join('\n\n')
+
+      userPrompt = `Write a League-Wide Matchup Preview for ${weekLabel} of the Dynasty Universe season.
+
+UPCOMING MATCHUPS:
+${matchupBlocks || 'No upcoming games found between user-coached teams.'}
+
+CURRENT STANDINGS:
+${standingsSummary}
+
+CHAMPIONSHIP HISTORY:
+${championshipHistory}
+
+WRITING RULES — follow these exactly:
+1. Cover every matchup listed. Do not skip any.
+2. ONLY use facts from the data above. Zero invented scores, records, or stats.
+3. Do NOT predict final scores — preview the story, not the scoreboard.
+4. Reference every coach by name — they are the stars of this league.
+5. If a series is a first meeting, say so — that's a story in itself.
+6. If a team is on a winning or losing streak (visible in their recent form), mention it.
+7. Tone: crisp ESPN Sunday morning preview energy — punchy, personal, competitive.
+
+FORMAT:
+- Headline: e.g. "Week ${week || '?'} Preview: What's On The Line"
+- One-sentence intro capturing the stakes of ${weekContext.phase}
+- For each matchup: 2-3 tight sentences — the narrative tension, momentum, and series context
+- Close with "Game of the Week" — name the most compelling matchup and the one sentence reason why
+
+${weekContext.isPlayoff ? '⚡ PLAYOFF — elimination stakes. Every sentence should feel like it matters.' : ''}
+${weekContext.isChampionship ? '🏆 CHAMPIONSHIP WEEK — legacy on the line.' : ''}`
+
     } else if (articleType === 'matchup-preview') {
       if (!homeTeam || !awayTeam) {
         return res.status(400).json({ error: 'homeTeam and awayTeam are required for matchup previews.' });
@@ -467,8 +570,10 @@ ${weekContext.isPlayoff ? '⚡ If these coaches could meet in the playoffs, make
     // ── Save to articles table ────────────────────────────────────────────
     const title = articleType === 'matchup-preview'
       ? `Matchup Preview: ${homeTeam} vs ${awayTeam}${week ? ` — Week ${week}` : ''}`
-      : articleType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) +
-        (week ? ` — Week ${week} (${weekContext.phase})` : '');
+      : articleType === 'league-preview'
+        ? `League Preview${week ? ` — Week ${week}` : ''} (${weekContext.phase})`
+        : articleType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) +
+          (week ? ` — Week ${week} (${weekContext.phase})` : '');
 
     await supabase.from('articles').insert({
       article_type: articleType,

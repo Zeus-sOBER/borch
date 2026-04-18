@@ -207,6 +207,7 @@ const ARTICLE_TYPE_LABELS = {
   'player-spotlight':  { label: 'Player Spotlight',  icon: '⭐' },
   'rivalry-breakdown': { label: 'Rivalry Breakdown', icon: '🔥' },
   'matchup-preview':   { label: 'Matchup Preview',   icon: '🏈' },
+  'league-preview':    { label: 'League Preview',    icon: '📅' },
 }
 
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen }) {
@@ -1176,6 +1177,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   const TYPES = [
     { id: 'power-rankings',    label: 'Power Rankings',    icon: '📊' },
     { id: 'weekly-recap',      label: 'Weekly Recap',      icon: '📰' },
+    { id: 'league-preview',    label: 'League Preview',    icon: '📅' },
     { id: 'player-spotlight',  label: 'Player Spotlight',  icon: '⭐' },
     { id: 'rivalry-breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
   ]
@@ -1241,7 +1243,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
     <div>
       {/* ── Header row ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
-        <SectionTitle isMobile={isMobile} sub="AI-Powered ESPN-Style Coverage">Media Center</SectionTitle>
+        <SectionTitle isMobile={isMobile} sub="Dynasty Universe · Stories, Previews & Power Rankings">Media Center</SectionTitle>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 4 }}>
           {commPin
             ? <><Badge color={C.green}>✓ Commissioner</Badge><button onClick={() => onPinSet(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Lock</button></>
