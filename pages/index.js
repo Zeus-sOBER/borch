@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, createContext, useContext } from 'react'
 import Head from 'next/head'
+
+// Logo override context — lets commissioners fix wrong team logos without code changes
+const LogoCtx = createContext({ overrides: {}, setOverride: () => {} })
 
 const C = {
   bg:      '#09090b',
@@ -16,7 +19,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Stats', 'Media', 'Sync']
+const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Stats', 'Media', 'Sync']
 
 // ── Game status helper ─────────────────────────────────────────
 // A game is only "final" if it has real scores — not null, not 0-0
@@ -75,13 +78,41 @@ const ESPN_IDS = {
   'wake forest': 154, 'washington': 264, 'washington state': 265,
   'west virginia': 277, 'western michigan': 269, 'wisconsin': 275,
   'wyoming': 278,
+  // Sun Belt / C-USA / non-Power teams often missing
+  'texas state': 326, 'texas state bobcats': 326,
+  'utep': 2638, 'ut el paso': 2638,
+  'north texas': 249, 'mean green': 249,
+  'louisiana tech': 2348, 'la tech': 2348,
+  'middle tennessee': 2393, 'mtsu': 2393,
+  'western kentucky': 98, 'wku': 98,
+  'marshall': 276,
+  'southern miss': 2572, 'usm': 2572,
+  'florida atlantic': 2226, 'fau': 2226,
+  'florida international': 2229, 'fiu': 2229,
+  'charlotte': 2429, 'uab': 2649,
+  'rice': 242, 'utsa': 2636,
+  'new mexico': 167, 'new mexico state': 166, 'nmsu': 166,
+  'hawaii': 62, 'nevada': 2440, 'unlv': 2439,
+  'boise state': 68, 'fresno state': 278, 'san diego state': 21,
+  'san jose state': 23, 'air force': 2005,
+  'army': 349, 'navy': 2426,
+  'ohio': 195, 'miami oh': 193, 'miami ohio': 193,
+  'ball state': 2050, 'bowling green': 189, 'buffalo': 2084,
+  'central michigan': 2117, 'eastern michigan': 2199,
+  'kent state': 2309, 'northern illinois': 2459,
+  'western michigan': 269, 'toledo': 2649, 'akron': 2006,
 }
-function getEspnId(name) {
+function getEspnId(name, overrides = {}) {
   if (!name) return null
   const key = name.toLowerCase().trim()
+  // Check per-team overrides first (commissioner-set)
+  if (overrides[key] === 'none') return null
+  if (typeof overrides[key] === 'number') return overrides[key]
   if (ESPN_IDS[key] != null) return ESPN_IDS[key]
+  // Fuzzy: only match if the STORED key contains our search term (never the reverse,
+  // which caused e.g. "texas state" → matching "texas" ID)
   for (const [k, id] of Object.entries(ESPN_IDS)) {
-    if (key.includes(k) || k.includes(key)) return id
+    if (k !== key && k.includes(key)) return id
   }
   return null
 }
@@ -92,7 +123,8 @@ function teamBadgeColor(name) {
   return BADGE_COLORS[Math.abs(h) % BADGE_COLORS.length]
 }
 function TeamLogo({ team, size = 24 }) {
-  const id = getEspnId(team)
+  const { overrides } = useContext(LogoCtx)
+  const id = getEspnId(team, overrides)
   const [failed, setFailed] = useState(!id)
   const initials = (team || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const color = teamBadgeColor(team)
@@ -177,7 +209,7 @@ function PillBtn({ active, onClick, children, small }) {
 }
 
 // ── Bottom Nav (mobile only) ───────────────────────────────────
-const NAV_ITEMS = [
+const ALL_NAV_ITEMS = [
   { id: 'Dashboard', icon: '🏠', label: 'Home' },
   { id: 'Standings', icon: '📊', label: 'Standings' },
   { id: 'Season',    icon: '📅', label: 'Season' },
@@ -187,7 +219,8 @@ const NAV_ITEMS = [
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
 
-function BottomNav({ tab, setTab }) {
+function BottomNav({ tab, setTab, commPin }) {
+  const navItems = commPin ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter(i => i.id !== 'Sync')
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -195,7 +228,7 @@ function BottomNav({ tab, setTab }) {
       display: 'flex', zIndex: 200,
       paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
-      {NAV_ITEMS.map(item => (
+      {navItems.map(item => (
         <button key={item.id} onClick={() => setTab(item.id)} style={{
           flex: 1, background: 'transparent', border: 'none',
           padding: '8px 2px 6px', cursor: 'pointer',
@@ -320,6 +353,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
   const [driveLoading, setDriveLoading] = useState(false)
   const [driveError,   setDriveError]   = useState('')
   const [savingImage,  setSavingImage]  = useState(false)
+  // Logo override UI state
+  const [logoSearch,   setLogoSearch]   = useState('')
+  const [logoCustomId, setLogoCustomId] = useState({})
+  const { overrides: logoOverrides, setOverride: setLogoOverride } = useContext(LogoCtx)
 
   // Derived values
   const featuredArticleId = settings?.featured_article_id ?? null
@@ -343,11 +380,11 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
     finally { setDriveLoading(false) }
   }
 
-  function openPicker(tab) {
-    const opening = !showPicker || pickerTab !== tab
-    setPickerTab(tab); setShowPicker(opening)
+  function openPicker(picTab) {
+    const opening = !showPicker || pickerTab !== picTab
+    setPickerTab(picTab); setShowPicker(opening)
     setShowPinEntry(false); setPinError('')
-    if (opening && tab === 'image') loadDriveFiles()
+    if (opening && picTab === 'image') loadDriveFiles()
   }
 
   async function saveSettings(patch, pin) {
@@ -408,7 +445,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
     <div>
 
       {/* ── COMMISSIONER PICKER BAR ── */}
-      {(articles.length > 0 || finalGames.length > 0) && (
+      {commPin && (articles.length > 0 || finalGames.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginRight: 4 }}>📌 Commissioner</span>
           {articles.length > 0 && (
@@ -418,17 +455,19 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           {finalGames.length > 0 && (
             <button onClick={() => openPicker('game')} style={{ background: showPicker && pickerTab==='game' ? C.green+'33' : 'transparent', color: showPicker && pickerTab==='game' ? C.green : C.muted, border: `1px solid ${showPicker && pickerTab==='game' ? C.green+'66' : C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>🏈 Game</button>
           )}
+          <button onClick={() => openPicker('logos')} style={{ background: showPicker && pickerTab==='logos' ? C.red+'33' : 'transparent', color: showPicker && pickerTab==='logos' ? C.red : C.muted, border: `1px solid ${showPicker && pickerTab==='logos' ? C.red+'66' : C.border}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>🖼 Logos</button>
         </div>
       )}
 
       {/* ── COMMISSIONER PICKER PANEL ── */}
       {showPicker && (
-        <Card style={{ marginBottom: 20, padding: '16px 18px', borderColor: pickerTab==='article' ? C.purple+'44' : pickerTab==='image' ? C.blue+'44' : C.green+'44', background: C.surface }}>
+        <Card style={{ marginBottom: 20, padding: '16px 18px', borderColor: pickerTab==='article' ? C.purple+'44' : pickerTab==='image' ? C.blue+'44' : pickerTab==='logos' ? C.red+'44' : C.green+'44', background: C.surface }}>
           {/* Tab row */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {articles.length > 0 && <button onClick={() => setPickerTab('article')} style={{ background: pickerTab==='article' ? C.purple+'33' : 'transparent', color: pickerTab==='article' ? C.purple : C.muted, border: `1px solid ${pickerTab==='article' ? C.purple+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>📰 Pick Story</button>}
             <button onClick={() => { setPickerTab('image'); loadDriveFiles() }} style={{ background: pickerTab==='image' ? C.blue+'33' : 'transparent', color: pickerTab==='image' ? C.blue : C.muted, border: `1px solid ${pickerTab==='image' ? C.blue+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🖼️ Pick Image</button>
             {finalGames.length > 0 && <button onClick={() => setPickerTab('game')} style={{ background: pickerTab==='game' ? C.green+'33' : 'transparent', color: pickerTab==='game' ? C.green : C.muted, border: `1px solid ${pickerTab==='game' ? C.green+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🏈 Pick Game</button>}
+            <button onClick={() => setPickerTab('logos')} style={{ background: pickerTab==='logos' ? C.red+'33' : 'transparent', color: pickerTab==='logos' ? C.red : C.muted, border: `1px solid ${pickerTab==='logos' ? C.red+'55' : C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1 }}>🖼 Fix Logos</button>
           </div>
 
           <PinEntry />
@@ -505,6 +544,70 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
               })}
             </div>
           )}
+
+          {/* LOGO OVERRIDES */}
+          {pickerTab === 'logos' && (() => {
+            // Collect all unique team names from games + standings
+            const allTeamNames = [...new Set([
+              ...teams.map(t => t.name),
+              ...finalGames.flatMap(g => [g.home_team, g.away_team]),
+            ].filter(Boolean))]
+            const filtered = logoSearch.trim()
+              ? allTeamNames.filter(n => n.toLowerCase().includes(logoSearch.toLowerCase()))
+              : allTeamNames
+            return (
+              <div>
+                <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+                  Find a team with a wrong logo and remove it or set a custom ESPN team ID. Changes save locally in your browser.
+                </div>
+                <input
+                  placeholder="Search team…"
+                  value={logoSearch}
+                  onChange={e => setLogoSearch(e.target.value)}
+                  style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', color: C.text, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
+                />
+                {Object.keys(logoOverrides).length > 0 && (
+                  <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: C.muted, fontSize: 11 }}>{Object.keys(logoOverrides).length} override{Object.keys(logoOverrides).length !== 1 ? 's' : ''} active</span>
+                    <button onClick={() => { setLogoOverrides({}); try { localStorage.removeItem('dynasty_logo_overrides') } catch {} }} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Reset All</button>
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+                  {filtered.slice(0, 40).map(name => {
+                    const key = name.toLowerCase()
+                    const override = logoOverrides[key]
+                    const hasOverride = override != null
+                    return (
+                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, background: hasOverride ? C.red+'0a' : C.card, border: `1px solid ${hasOverride ? C.red+'44' : C.border}` }}>
+                        <TeamLogo team={name} size={28} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: C.text, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                          {hasOverride && <div style={{ color: C.red, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>{override === 'none' ? 'LOGO HIDDEN' : `CUSTOM ID: ${override}`}</div>}
+                        </div>
+                        {hasOverride
+                          ? <button onClick={() => setLogoOverride(name, null)} style={{ background: 'transparent', color: C.green, border: `1px solid ${C.green}44`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, whiteSpace: 'nowrap' }}>↩ Restore</button>
+                          : <>
+                              <input
+                                type="number"
+                                placeholder="ESPN ID"
+                                value={logoCustomId[name] || ''}
+                                onChange={e => setLogoCustomId(p => ({ ...p, [name]: e.target.value }))}
+                                style={{ width: 80, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: '4px 8px', color: C.text, fontSize: 11 }}
+                              />
+                              {logoCustomId[name] && (
+                                <button onClick={() => { setLogoOverride(name, parseInt(logoCustomId[name])); setLogoCustomId(p => ({ ...p, [name]: '' })) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, whiteSpace: 'nowrap' }}>Set ID</button>
+                              )}
+                              <button onClick={() => setLogoOverride(name, 'none')} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, whiteSpace: 'nowrap' }}>✕ Remove</button>
+                            </>
+                        }
+                      </div>
+                    )
+                  })}
+                  {filtered.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: '16px 0' }}>No teams found</div>}
+                </div>
+              </div>
+            )
+          })()}
         </Card>
       )}
 
@@ -567,11 +670,14 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
             <div style={{ padding: '20px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
               {/* Home */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: fgHomeWon ? 1 : 0.45 }}>
-                <div>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 180 }}>{featuredGame.home_team}</div>
-                  {fgHomeWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <TeamLogo team={featuredGame.home_team} size={isMobile ? 32 : 40} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 110 : 150 }}>{featuredGame.home_team}</div>
+                    {fgHomeWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                  </div>
                 </div>
-                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgHomeWon ? C.accent : '#3a3a4a', lineHeight: 1 }}>{featuredGame.home_score}</div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgHomeWon ? C.accent : '#3a3a4a', lineHeight: 1, flexShrink: 0 }}>{featuredGame.home_score}</div>
               </div>
               {/* Divider */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -581,11 +687,14 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
               </div>
               {/* Away */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: fgAwayWon ? 1 : 0.45 }}>
-                <div>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 180 }}>{featuredGame.away_team}</div>
-                  {fgAwayWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <TeamLogo team={featuredGame.away_team} size={isMobile ? 32 : 40} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 110 : 150 }}>{featuredGame.away_team}</div>
+                    {fgAwayWon && <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 2, marginTop: 2 }}>🏆 WINNER</div>}
+                  </div>
                 </div>
-                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgAwayWon ? C.accent : '#3a3a4a', lineHeight: 1 }}>{featuredGame.away_score}</div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 44 : 60, fontWeight: 700, color: fgAwayWon ? C.accent : '#3a3a4a', lineHeight: 1, flexShrink: 0 }}>{featuredGame.away_score}</div>
               </div>
             </div>
             <div style={{ padding: '10px 20px', borderTop: `1px solid ${C.border}` }}>
@@ -1333,6 +1442,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   const [isDeleting,      setIsDeleting]      = useState(false)
   const [isEditing,       setIsEditing]       = useState(false)
   const [editContent,     setEditContent]     = useState('')
+  const [editTitle,       setEditTitle]       = useState('')
   const [isSaving,        setIsSaving]        = useState(false)
   const [showGenerator,   setShowGenerator]   = useState(false)
   const [genType,         setGenType]         = useState('power-rankings')
@@ -1398,9 +1508,10 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   const saveArticle = async (a) => {
     setIsSaving(true)
     try {
-      await fetch('/api/articles', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, content: editContent, pin: commPin }) })
+      const res = await fetch('/api/articles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, article_type: a.article_type, week: a.week, title: editTitle.trim() || a.title || null, content: editContent, pin: commPin }) })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
       setIsEditing(false); loadHistory()
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.error('Save failed:', e.message) }
     finally { setIsSaving(false) }
   }
 
@@ -1467,7 +1578,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
               <div style={{ color: C.muted, fontSize: 11 }}>{new Date(expandedArticle.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {commPin && !isEditing && <button onClick={() => { setEditContent(expandedArticle.content); setIsEditing(true) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>✏️ Edit</button>}
+              {commPin && !isEditing && <button onClick={() => { setEditContent(expandedArticle.content); setEditTitle(expandedArticle.title || ''); setIsEditing(true) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>✏️ Edit</button>}
               {commPin && isEditing && <><button onClick={() => saveArticle(expandedArticle)} disabled={isSaving} style={{ background: C.green, color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>{isSaving ? 'Saving…' : '💾 Save'}</button><button onClick={() => setIsEditing(false)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 6, padding: '7px 12px', cursor: 'pointer', fontSize: 11 }}>Cancel</button></>}
               <button onClick={() => navigator.clipboard.writeText(isEditing ? editContent : expandedArticle.content)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 12px', cursor: 'pointer', fontSize: 11 }}>📋 Copy</button>
               <button onClick={() => { setExpandedId(null); setIsEditing(false) }} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 10px', cursor: 'pointer', fontSize: 11 }}>✕</button>
@@ -1475,7 +1586,21 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
           </div>
           <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: 16 }} />
           {isEditing
-            ? <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ width: '100%', minHeight: 400, background: C.bg, color: C.text, border: `1px solid ${C.accent}`, borderRadius: 6, padding: 14, fontSize: 14, lineHeight: 1.8, fontFamily: 'Lato,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
+            ? (
+              <div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>HEADLINE</div>
+                  <input
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    placeholder="Article headline…"
+                    style={{ width: '100%', background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6, padding: '10px 14px', color: C.text, fontSize: 17, fontFamily: "'Oswald', sans-serif", fontWeight: 700, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>BODY</div>
+                <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ width: '100%', minHeight: 400, background: C.bg, color: C.text, border: `1px solid ${C.accent}`, borderRadius: 6, padding: 14, fontSize: 14, lineHeight: 1.8, fontFamily: 'Lato,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
+              </div>
+            )
             : (expandedArticle.content || '').split('\n').map((line, i) => {
                 if (!line.trim()) return <div key={i} style={{ height: 10 }} />
                 const clean = line.replace(/^#+\s*/, '')
@@ -2466,13 +2591,17 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
 // ── Root App ───────────────────────────────────────────────────
 export default function App() {
   const isMobile = useMobile()
-  const [tab, setTab]         = useState('Dashboard')
-  const [data, setData]       = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 } })
-  const [loadingData, setLoadingData] = useState(true)
-  const [commPin, setCommPin] = useState(null)
+  const [tab, setTab]                   = useState('Dashboard')
+  const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 } })
+  const [loadingData, setLoadingData]   = useState(true)
+  const [commPin, setCommPin]           = useState(null)
+  const [showCommLogin, setShowCommLogin] = useState(false)
+  const [commLoginInput, setCommLoginInput] = useState('')
+  const [commLoginError, setCommLoginError] = useState('')
   const [narrativeEntries, setNarrativeEntries] = useState([])
-  const [articles, setArticles] = useState([])
-  const [openArticle, setOpenArticle] = useState(null)
+  const [articles, setArticles]         = useState([])
+  const [openArticle, setOpenArticle]   = useState(null)
+  const [logoOverrides, setLogoOverrides] = useState({})
 
   const fetchData = useCallback(async () => {
     try {
@@ -2509,7 +2638,46 @@ export default function App() {
     if (p) setCommPin(p)
   }, [])
 
+  // Restore logo overrides from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dynasty_logo_overrides')
+      if (saved) setLogoOverrides(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }, [])
+
+  function setLogoOverride(teamName, value) {
+    const key = (teamName || '').toLowerCase().trim()
+    setLogoOverrides(prev => {
+      const next = { ...prev }
+      if (value == null) delete next[key]
+      else next[key] = value
+      try { localStorage.setItem('dynasty_logo_overrides', JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  // Commissioner login handler (used by top nav login bar)
+  const handleCommLogin = async () => {
+    if (!commLoginInput.trim()) return
+    // Verify PIN against the coaches API
+    try {
+      const res = await fetch('/api/coaches/0', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: commLoginInput.trim() }),
+      })
+      if (res.status === 403) { setCommLoginError('Wrong PIN — try again'); return }
+      const pin = commLoginInput.trim()
+      setCommPin(pin)
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin)
+      setShowCommLogin(false); setCommLoginInput(''); setCommLoginError('')
+    } catch {
+      setCommLoginError('Connection error — try again')
+    }
+  }
+
   return (
+    <LogoCtx.Provider value={{ overrides: logoOverrides, setOverride: setLogoOverride }}>
     <>
       <Head>
         <title>Dynasty Universe · CFB 26</title>
@@ -2540,19 +2708,22 @@ export default function App() {
           </div>
 
           {/* Tabs — hidden on mobile (use bottom nav instead) */}
-          {!isMobile && (
-            <div style={{ display: 'flex', gap: 2, flex: 1, overflowX: 'auto' }}>
-              {TABS.map(t => (
-                <button key={t} onClick={() => setTab(t)} style={{
-                  background: 'transparent', color: tab === t ? C.accent : C.muted,
-                  border: 'none', borderBottom: `2px solid ${tab === t ? C.accent : 'transparent'}`,
-                  padding: '20px 14px', cursor: 'pointer',
-                  fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.8,
-                  textTransform: 'uppercase', transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
-                }}>{t}</button>
-              ))}
-            </div>
-          )}
+          {!isMobile && (() => {
+            const visibleTabs = commPin ? ALL_TABS : ALL_TABS.filter(t => t !== 'Sync')
+            return (
+              <div style={{ display: 'flex', gap: 2, flex: 1, overflowX: 'auto' }}>
+                {visibleTabs.map(t => (
+                  <button key={t} onClick={() => setTab(t)} style={{
+                    background: 'transparent', color: tab === t ? C.accent : C.muted,
+                    border: 'none', borderBottom: `2px solid ${tab === t ? C.accent : 'transparent'}`,
+                    padding: '20px 14px', cursor: 'pointer',
+                    fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.8,
+                    textTransform: 'uppercase', transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>{t}</button>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Mobile: show current tab name */}
           {isMobile && (
@@ -2561,14 +2732,56 @@ export default function App() {
             </div>
           )}
 
-          {/* External links */}
-          {!isMobile && (
-            <div style={{ display: 'flex', gap: 16, paddingLeft: 16, flexShrink: 0 }}>
-              <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
-              <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
-            </div>
-          )}
+          {/* Right side: external links + commissioner login */}
+          <div style={{ display: 'flex', gap: isMobile ? 8 : 16, paddingLeft: isMobile ? 0 : 16, flexShrink: 0, alignItems: 'center' }}>
+            {!isMobile && (
+              <>
+                <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
+                <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
+              </>
+            )}
+            {/* Commissioner login/status */}
+            {commPin
+              ? (
+                <button
+                  onClick={() => {
+                    setCommPin(null)
+                    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('dynasty_comm_pin')
+                    // If on Sync tab, bounce back to Dashboard
+                    if (tab === 'Sync') setTab('Dashboard')
+                  }}
+                  style={{ background: C.green + '18', color: C.green, border: `1px solid ${C.green}44`, borderRadius: 6, padding: isMobile ? '5px 10px' : '6px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 9 : 11, letterSpacing: 1, whiteSpace: 'nowrap' }}
+                  title="Click to log out as commissioner"
+                >✓ COMM</button>
+              )
+              : (
+                <button
+                  onClick={() => setShowCommLogin(v => !v)}
+                  style={{ background: 'transparent', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: isMobile ? '5px 10px' : '6px 14px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 9 : 11, letterSpacing: 1, whiteSpace: 'nowrap' }}
+                >🔒 {isMobile ? 'COMM' : 'COMMISSIONER'}</button>
+              )
+            }
+          </div>
         </div>
+
+        {/* Commissioner login drop-down bar */}
+        {showCommLogin && !commPin && (
+          <div style={{ background: C.card, borderTop: `1px solid ${C.border}`, padding: '12px 24px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.muted, letterSpacing: 1 }}>COMMISSIONER PIN:</span>
+            <input
+              type="password"
+              placeholder="Enter PIN…"
+              value={commLoginInput}
+              onChange={e => { setCommLoginInput(e.target.value); setCommLoginError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleCommLogin()}
+              autoFocus
+              style={{ background: C.bg, border: `1px solid ${commLoginError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 14, width: 180, letterSpacing: 4 }}
+            />
+            <button onClick={handleCommLogin} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 18px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700 }}>Unlock</button>
+            <button onClick={() => { setShowCommLogin(false); setCommLoginError(''); setCommLoginInput('') }} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+            {commLoginError && <span style={{ color: C.red, fontSize: 13 }}>❌ {commLoginError}</span>}
+          </div>
+        )}
       </div>
 
       {/* Score Ticker — only on the home tab */}
@@ -2620,10 +2833,11 @@ export default function App() {
       </div>
 
       {/* Bottom nav — mobile only */}
-      {isMobile && <BottomNav tab={tab} setTab={setTab} />}
+      {isMobile && <BottomNav tab={tab} setTab={setTab} commPin={commPin} />}
 
       {/* Article Slide-Up */}
       <ArticleSlideUp article={openArticle} onClose={() => setOpenArticle(null)} isMobile={isMobile} />
     </>
+    </LogoCtx.Provider>
   )
 }

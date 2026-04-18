@@ -32,6 +32,7 @@ export default function MediaCenter() {
   const [expandedId,      setExpandedId]      = useState(null)   // which article is open
   const [isEditing,       setIsEditing]       = useState(false)
   const [editContent,     setEditContent]     = useState('')
+  const [editTitle,       setEditTitle]       = useState('')
   const [isSaving,        setIsSaving]        = useState(false)
   const [saveSuccess,     setSaveSuccess]     = useState(false)
   const [isDeleting,      setIsDeleting]      = useState(false)
@@ -95,11 +96,11 @@ export default function MediaCenter() {
     try {
       const res  = await fetch('/api/articles', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: article.id, article_type: article.article_type, week: article.week, title: article.title, content: editContent, pin }),
+        body: JSON.stringify({ id: article.id, article_type: article.article_type, week: article.week, title: editTitle.trim() || article.title || null, content: editContent, pin }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setIsEditing(false); setSaveSuccess(true)
+      setIsEditing(false); setEditTitle(''); setSaveSuccess(true)
       fetchArticles()
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) { alert('Save failed: ' + err.message) }
@@ -224,7 +225,7 @@ export default function MediaCenter() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
                 {isCommissioner && !isEditing && (
-                  <button onClick={() => { setEditContent(expandedArticle.content); setIsEditing(true) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700 }}>✏️ Edit</button>
+                  <button onClick={() => { setEditContent(expandedArticle.content); setEditTitle(expandedArticle.title || ''); setIsEditing(true) }} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700 }}>✏️ Edit</button>
                 )}
                 {isCommissioner && isEditing && (
                   <>
@@ -240,7 +241,21 @@ export default function MediaCenter() {
             <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: 20 }} />
 
             {isEditing
-              ? <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ width: '100%', minHeight: 480, background: C.bg, color: C.text, border: `1px solid ${C.accent}`, borderRadius: 6, padding: 16, fontSize: 14, lineHeight: 1.8, fontFamily: 'Lato,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
+              ? (
+                <div>
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 7 }}>HEADLINE</div>
+                    <input
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      placeholder="Article headline…"
+                      style={{ width: '100%', background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6, padding: '10px 14px', color: C.text, fontSize: 18, fontFamily: 'Oswald,sans-serif', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 7 }}>BODY</div>
+                  <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ width: '100%', minHeight: 480, background: C.bg, color: C.text, border: `1px solid ${C.accent}`, borderRadius: 6, padding: 16, fontSize: 14, lineHeight: 1.8, fontFamily: 'Lato,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
+                </div>
+              )
               : <div style={{ color: '#d0d0d0', fontSize: 15, lineHeight: 1.85, whiteSpace: 'pre-wrap', fontFamily: 'Lato,sans-serif' }}>{expandedArticle.content}</div>
             }
           </div>
@@ -307,7 +322,7 @@ export default function MediaCenter() {
                       {/* Action row (commissioner) */}
                       {isCommissioner && (
                         <div onClick={e => e.stopPropagation()} style={{ borderTop: `1px solid ${C.border}`, padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', background: C.surface }}>
-                          <button onClick={() => { setExpandedId(article.id); setEditContent(article.content); setIsEditing(true) }} style={{ background: 'transparent', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1 }}>✏️ Edit</button>
+                          <button onClick={() => { setExpandedId(article.id); setEditContent(article.content); setEditTitle(article.title || ''); setIsEditing(true) }} style={{ background: 'transparent', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1 }}>✏️ Edit</button>
                           <button onClick={() => navigator.clipboard.writeText(article.content)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1 }}>📋 Copy</button>
 
                           {!confirmDel
