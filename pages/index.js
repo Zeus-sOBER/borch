@@ -360,7 +360,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
             <div>
               {driveLoading && <div style={{ color: C.muted, fontSize: 13, padding: '8px 0' }}>⏳ Loading Drive images…</div>}
               {driveError   && <div style={{ color: C.red,  fontSize: 13, padding: '8px 0' }}>❌ {driveError}</div>}
-              {\!driveLoading && driveFiles.length === 0 && \!driveError && <div style={{ color: C.muted, fontSize: 13 }}>No images found in Drive folder.</div>}
+              {!driveLoading && driveFiles.length === 0 && !driveError && <div style={{ color: C.muted, fontSize: 13 }}>No images found in Drive folder.</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
                 {driveFiles.map(f => {
                   const isActive = f.id === heroImageId
@@ -396,10 +396,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                         <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 14 }}>{g.home_score}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                        <span style={{ color: \!homeWon ? C.text : C.muted, fontSize: 13, fontWeight: \!homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{g.away_team}</span>
-                        <span style={{ fontFamily: "'Oswald', sans-serif", color: \!homeWon ? C.accent : C.muted, fontSize: 14 }}>{g.away_score}</span>
+                        <span style={{ color: !homeWon ? C.text : C.muted, fontSize: 13, fontWeight: !homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{g.away_team}</span>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", color: !homeWon ? C.accent : C.muted, fontSize: 14 }}>{g.away_score}</span>
                       </div>
-                      <div style={{ color: C.muted, fontSize: 9, marginTop: 3, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase' }}>Week {g.week} · Final{g.game_type && g.game_type \!== 'regular' ? ' · '+g.game_type.replace(/_/g,' ') : ''}</div>
+                      <div style={{ color: C.muted, fontSize: 9, marginTop: 3, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase' }}>Week {g.week} · Final{g.game_type && g.game_type !== 'regular' ? ' · '+g.game_type.replace(/_/g,' ') : ''}</div>
                     </div>
                     <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: isActive ? C.green : C.muted, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>{isActive ? '✓ Shown' : 'Show →'}</span>
                   </div>
@@ -461,7 +461,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
             {/* Game header */}
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>
-                {featuredGame.game_type && featuredGame.game_type \!== 'regular' ? featuredGame.game_type.replace(/_/g,' ').toUpperCase() : `Week ${featuredGame.week}`}
+                {featuredGame.game_type && featuredGame.game_type !== 'regular' ? featuredGame.game_type.replace(/_/g,' ').toUpperCase() : `Week ${featuredGame.week}`}
               </span>
               <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, background: C.accent+'22', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 3, padding: '2px 10px', letterSpacing: 2 }}>FINAL</span>
             </div>
@@ -520,7 +520,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.text }}>{t.wins}-{t.losses}</div>
-                    {t.streak && t.streak \!== 'unknown' && /^[WL]\d+$/.test(t.streak) && <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>}
+                    {t.streak && t.streak !== 'unknown' && /^[WL]\d+$/.test(t.streak) && <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>}
                   </div>
                 </div>
               ))
