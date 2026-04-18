@@ -18,6 +18,17 @@ const C = {
 
 const TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Stats', 'Media', 'Sync']
 
+// ── Game status helper ─────────────────────────────────────────
+// A game is only "final" if it has real scores — not null, not 0-0
+function gameIsFinal(g) {
+  if (!g) return false
+  const flagged = g.is_final || g.status === 'Final'
+  if (!flagged) return false
+  if (g.home_score == null || g.away_score == null) return false
+  if (g.home_score === 0 && g.away_score === 0) return false
+  return true
+}
+
 // ── Responsive hook ────────────────────────────────────────────
 function useMobile() {
   const [m, setM] = useState(false)
@@ -131,7 +142,7 @@ function BottomNav({ tab, setTab }) {
 
 // ── Score Ticker ────────────────────────────────────────────────
 function ScoreTicker({ games, setTab, isMobile }) {
-  const finalGames = [...games].filter(g => g.status === 'Final' || g.is_final).reverse().slice(0, 14)
+  const finalGames = [...games].filter(gameIsFinal).reverse().slice(0, 14)
   if (finalGames.length === 0) return null
 
   return (
@@ -199,7 +210,7 @@ const ARTICLE_TYPE_LABELS = {
 }
 
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen }) {
-  const finalGames  = games.filter(g => g.status === 'Final' || g.is_final)
+  const finalGames  = games.filter(gameIsFinal)
   const currentWeek = settings?.current_week ?? 0
 
   const rankedTeams = [...teams].sort((a, b) => {
@@ -587,10 +598,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
 
       {/* ── NEXT MATCHUP PREVIEW ── */}
       {(() => {
-        const upcoming = games.filter(g => !g.is_final && g.status !== 'Final' && g.home_team && g.away_team)
+        const upcoming = games.filter(g => !gameIsFinal(g) && g.home_team && g.away_team)
         if (upcoming.length === 0) return null
         const g = upcoming[0]
-        const finalGs = games.filter(x => x.is_final || x.status === 'Final')
+        const finalGs = games.filter(gameIsFinal)
         const h2h = finalGs.filter(x =>
           (x.home_team === g.home_team && x.away_team === g.away_team) ||
           (x.home_team === g.away_team && x.away_team === g.home_team)
@@ -771,7 +782,7 @@ function ShareCard({ game, onClose }) {
   const gameLabel = game.game_type && game.game_type !== 'regular'
     ? game.game_type.replace(/_/g, ' ').toUpperCase()
     : null
-  const isFinal = game.is_final || game.status === 'Final'
+  const isFinal = gameIsFinal(game)
 
   return (
     <div
@@ -965,7 +976,7 @@ function Season({ games, teams, isMobile, settings }) {
         <div style={{ display: 'flex', gap: 5, minWidth: 'max-content' }}>
           {allWeeks.map(w => {
             const hasGames   = weeksWithGames.has(w)
-            const hasFinal   = games.some(g => g.week === w && (g.is_final || g.status === 'Final'))
+            const hasFinal   = games.some(g => g.week === w && gameIsFinal(g))
             const isSelected = w === selectedWeek
             const isCurrent  = w === currentWeek
             const label      = WEEK_SHORT[w] || `Wk ${w}`
@@ -1003,7 +1014,7 @@ function Season({ games, teams, isMobile, settings }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
           {weekGames.map(g => {
-            const isFinal   = g.is_final || g.status === 'Final'
+            const isFinal   = gameIsFinal(g)
             const homeWon   = isFinal && g.home_score > g.away_score
             const awayWon   = isFinal && g.away_score > g.home_score
             const homeHuman = humanNames.has((g.home_team || '').toLowerCase())
@@ -1955,8 +1966,8 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
 
 // ── Matchups Tab ───────────────────────────────────────────────
 function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen, commPin, onPinSet }) {
-  const finalGames    = games.filter(g => g.is_final || g.status === 'Final')
-  const upcomingGames = games.filter(g => !g.is_final && g.status !== 'Final' && g.home_team && g.away_team)
+  const finalGames    = games.filter(gameIsFinal)
+  const upcomingGames = games.filter(g => !gameIsFinal(g) && g.home_team && g.away_team)
 
   // Generate state (keyed by "HomeTeam|AwayTeam|Week")
   const [generating,    setGenerating]    = useState(null)

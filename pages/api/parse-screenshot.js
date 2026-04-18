@@ -326,6 +326,12 @@ HUMAN COACHES IN THIS LEAGUE: ${coachList}
 CURRENT OFFICIAL WEEK (commissioner-set): ${currentWeek}
 IMPORTANT: Only reference or update data from week ${currentWeek} or earlier.
 
+CRITICAL RULE ABOUT SCORES:
+- A game is ONLY "is_final": true if it has REAL scores (both teams scored something, at least one score > 0)
+- If a row has blank/empty/missing score fields → "is_final": false, "home_score": null, "away_score": null
+- NEVER use 0 as a placeholder for a missing score — use null
+- A game with scores of 0-0 almost certainly means the scores were blank — set is_final: false
+
 The document may contain any combination of:
 - Game scores and results
 - Player stats
@@ -345,7 +351,7 @@ Analyze this document and return ONLY a JSON object (no markdown, no explanation
   "week": <number or null>,
   "summary": "<one sentence describing what this doc contains>",
   "games": [
-    { "home_team": "", "away_team": "", "home_score": 0, "away_score": 0, "week": 0, "is_final": true }
+    { "home_team": "", "away_team": "", "home_score": null, "away_score": null, "week": 0, "is_final": false }
   ],
   "players": [
     { "name": "", "team": "", "position": "", "yards": 0, "touchdowns": 0, "completions": 0, "attempts": 0, "interceptions": 0, "carries": 0, "receptions": 0 }
@@ -409,7 +415,7 @@ Return ONLY a JSON object (no markdown, no explanation):
   "summary": "<one sentence: what is shown in this screenshot>",
   "cfb_context": "<what phase of season this is and why it matters>",
   "games": [
-    { "home_team": "", "away_team": "", "home_score": 0, "away_score": 0, "week": 0, "is_final": true, "game_type": "regular|conference_championship|bowl|cfp_quarterfinal|cfp_semifinal|national_championship" }
+    { "home_team": "", "away_team": "", "home_score": 42, "away_score": 17, "week": 0, "is_final": true, "game_type": "regular|conference_championship|bowl|cfp_quarterfinal|cfp_semifinal|national_championship" }
   ],
   "players": [
     { "name": "", "team": "", "position": "", "yards": 0, "touchdowns": 0, "completions": 0, "attempts": 0, "interceptions": 0, "carries": 0, "receptions": 0 }
@@ -543,15 +549,23 @@ async function saveToSupabase(data, coaches, humanTeams) {
   if (data.games?.length > 0) {
     for (const game of data.games) {
       if (!game.home_team || !game.away_team) continue;
-      const isFinal = game.is_final !== undefined && game.is_final !== null
+      const rawFinal = game.is_final !== undefined && game.is_final !== null
         ? game.is_final
         : (data.source !== 'schedule_doc' && data.source !== 'schedule_image');
-      if (isFinal && game.home_score != null && game.away_score != null) hasFinalGames = true;
+
+      // A game is ONLY final if it has real non-null, non-zero-zero scores
+      const homeScore = game.home_score ?? null;
+      const awayScore = game.away_score ?? null;
+      const hasRealScores = homeScore !== null && awayScore !== null &&
+        !(homeScore === 0 && awayScore === 0);
+      const isFinal = rawFinal && hasRealScores;
+
+      if (isFinal) hasFinalGames = true;
       const { error } = await supabase.from('games').upsert({
         home_team:  game.home_team,
         away_team:  game.away_team,
-        home_score: game.home_score ?? null,
-        away_score: game.away_score ?? null,
+        home_score: hasRealScores ? homeScore : null,
+        away_score: hasRealScores ? awayScore : null,
         week:       game.week ?? data.week ?? null,
         is_final:   isFinal,
         game_type:  game.game_type ?? 'regular'
