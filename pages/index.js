@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext } from 'rea
 import Head from 'next/head'
 
 // Logo override context — lets commissioners fix wrong team logos without code changes
-const LogoCtx = createContext({ overrides: {}, setOverride: () => {} })
+const LogoCtx = createContext({ overrides: {}, setOverride: () => {}, resetOverrides: () => {} })
 
 const C = {
   bg:      '#09090b',
@@ -356,7 +356,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
   // Logo override UI state
   const [logoSearch,   setLogoSearch]   = useState('')
   const [logoCustomId, setLogoCustomId] = useState({})
-  const { overrides: logoOverrides, setOverride: setLogoOverride } = useContext(LogoCtx)
+  const { overrides: logoOverrides, setOverride: setLogoOverride, resetOverrides } = useContext(LogoCtx)
 
   // Derived values
   const featuredArticleId = settings?.featured_article_id ?? null
@@ -471,6 +471,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           </div>
 
           <PinEntry />
+          {/* Error banner — visible even when commPin already set */}
+          {pinError && !showPinEntry && (
+            <div style={{ color: C.red, fontSize: 12, background: C.red+'11', border: `1px solid ${C.red}33`, borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>❌ {pinError}</div>
+          )}
 
           {/* STORY LIST */}
           {pickerTab === 'article' && (
@@ -569,7 +573,7 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                 {Object.keys(logoOverrides).length > 0 && (
                   <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: C.muted, fontSize: 11 }}>{Object.keys(logoOverrides).length} override{Object.keys(logoOverrides).length !== 1 ? 's' : ''} active</span>
-                    <button onClick={() => { setLogoOverrides({}); try { localStorage.removeItem('dynasty_logo_overrides') } catch {} }} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Reset All</button>
+                    <button onClick={() => resetOverrides()} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}44`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Reset All</button>
                   </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
@@ -2638,23 +2642,40 @@ export default function App() {
     if (p) setCommPin(p)
   }, [])
 
-  // Restore logo overrides from localStorage
+  // Sync logo overrides from Supabase settings (league-wide, not just local browser)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('dynasty_logo_overrides')
-      if (saved) setLogoOverrides(JSON.parse(saved))
-    } catch { /* ignore */ }
-  }, [])
+    if (data.settings?.logo_overrides) {
+      setLogoOverrides(data.settings.logo_overrides)
+    }
+  }, [data.settings?.logo_overrides])
 
-  function setLogoOverride(teamName, value) {
+  async function setLogoOverride(teamName, value) {
     const key = (teamName || '').toLowerCase().trim()
     setLogoOverrides(prev => {
       const next = { ...prev }
       if (value == null) delete next[key]
       else next[key] = value
-      try { localStorage.setItem('dynasty_logo_overrides', JSON.stringify(next)) } catch { /* ignore */ }
+      // Save to Supabase so all users see the change
+      if (commPin) {
+        fetch('/api/league-settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: commPin, logo_overrides: next }),
+        }).catch(() => {})
+      }
       return next
     })
+  }
+
+  async function resetLogoOverrides() {
+    setLogoOverrides({})
+    if (commPin) {
+      fetch('/api/league-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: commPin, logo_overrides: {} }),
+      }).catch(() => {})
+    }
   }
 
   // Commissioner login handler (used by top nav login bar)
@@ -2677,7 +2698,7 @@ export default function App() {
   }
 
   return (
-    <LogoCtx.Provider value={{ overrides: logoOverrides, setOverride: setLogoOverride }}>
+    <LogoCtx.Provider value={{ overrides: logoOverrides, setOverride: setLogoOverride, resetOverrides: resetLogoOverrides }}>
     <>
       <Head>
         <title>Dynasty Universe · CFB 26</title>
@@ -2803,7 +2824,7 @@ export default function App() {
           )
           : (
             <>
-              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={fetchArticles} commPin={commPin} onArticleOpen={setOpenArticle} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
