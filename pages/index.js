@@ -296,11 +296,13 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
   const finalGames  = games.filter(gameIsFinal)
   const currentWeek = settings?.current_week ?? 0
 
-  const rankedTeams = [...teams].sort((a, b) => {
-    const aRank = a.rank ?? 9999; const bRank = b.rank ?? 9999
-    if (aRank !== bRank) return aRank - bRank
-    return (b.wins - a.wins) || ((b.pts - b.pts_against) - (a.pts - a.pts_against))
-  })
+  const rankedTeams = [...teams]
+    .filter(t => t.coach && t.coach.trim() !== '')  // only user-coached teams
+    .sort((a, b) => {
+      const aRank = a.rank ?? 9999; const bRank = b.rank ?? 9999
+      if (aRank !== bRank) return aRank - bRank
+      return (b.wins - a.wins) || ((b.pts - b.pts_against) - (a.pts - a.pts_against))
+    })
 
   const topPasser   = players.find(p => p.pos === 'QB')
   const topRusher   = players.find(p => p.pos === 'RB')
