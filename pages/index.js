@@ -41,6 +41,82 @@ function useMobile() {
   return m
 }
 
+// ── ESPN CDN Team Logo ─────────────────────────────────────────
+const ESPN_IDS = {
+  'air force': 2005, 'akron': 2006, 'alabama': 333, 'appalachian state': 2026,
+  'arizona': 12, 'arizona state': 9, 'arkansas': 8, 'army': 349,
+  'auburn': 2, 'ball state': 2050, 'baylor': 239, 'boise state': 68,
+  'bowling green': 189, 'brigham young': 252, 'byu': 252, 'buffalo': 2084,
+  'california': 25, 'cal': 25, 'central florida': 2116, 'ucf': 2116,
+  'central michigan': 2117, 'cincinnati': 2132, 'clemson': 228,
+  'coastal carolina': 324, 'colorado': 38, 'colorado state': 36,
+  'duke': 150, 'east carolina': 151, 'florida': 57, 'florida state': 52,
+  'fsu': 52, 'fresno state': 278, 'georgia': 61, 'georgia southern': 290,
+  'georgia tech': 59, 'houston': 248, 'illinois': 356, 'indiana': 84,
+  'iowa': 2294, 'iowa state': 66, 'james madison': 2561, 'kansas': 2305,
+  'kansas state': 2306, 'kent state': 2309, 'kentucky': 96,
+  'liberty': 2335, 'louisiana': 309, 'louisville': 97, 'lsu': 99,
+  'maryland': 120, 'memphis': 235, 'miami': 2390, 'miami fl': 2390,
+  'miami (fl)': 2390, 'miami oh': 193, 'miami university': 193,
+  'michigan': 130, 'michigan state': 127, 'minnesota': 135,
+  'mississippi': 145, 'ole miss': 145, 'mississippi state': 344,
+  'missouri': 142, 'navy': 2426, 'nebraska': 158, 'nc state': 152,
+  'north carolina': 153, 'unc': 153, 'northern illinois': 2459,
+  'notre dame': 87, 'ohio': 195, 'ohio state': 194, 'oklahoma': 201,
+  'oklahoma state': 197, 'old dominion': 2427, 'oregon': 2483,
+  'oregon state': 204, 'penn state': 213, 'pittsburgh': 221, 'pitt': 221,
+  'purdue': 2509, 'rutgers': 164, 'sam houston': 2534, 'smu': 2567,
+  'south alabama': 6, 'south carolina': 2579, 'southern california': 30,
+  'usc': 30, 'stanford': 24, 'syracuse': 183, 'tcu': 2628,
+  'temple': 218, 'tennessee': 2633, 'texas': 251, 'texas a&m': 245,
+  'texas tech': 2641, 'toledo': 2649, 'troy': 2653, 'tulane': 2655,
+  'tulsa': 202, 'ucla': 26, 'utah': 254, 'utah state': 328,
+  'vanderbilt': 238, 'virginia': 258, 'virginia tech': 259,
+  'wake forest': 154, 'washington': 264, 'washington state': 265,
+  'west virginia': 277, 'western michigan': 269, 'wisconsin': 275,
+  'wyoming': 278,
+}
+function getEspnId(name) {
+  if (!name) return null
+  const key = name.toLowerCase().trim()
+  if (ESPN_IDS[key] != null) return ESPN_IDS[key]
+  for (const [k, id] of Object.entries(ESPN_IDS)) {
+    if (key.includes(k) || k.includes(key)) return id
+  }
+  return null
+}
+const BADGE_COLORS = ['#c9a84c','#9b7fd4','#4a90d9','#4caf7d','#e07b52','#52c0e0','#e052a0']
+function teamBadgeColor(name) {
+  let h = 0
+  for (const c of (name || '')) h = (h * 31 + c.charCodeAt(0)) & 0xffffffff
+  return BADGE_COLORS[Math.abs(h) % BADGE_COLORS.length]
+}
+function TeamLogo({ team, size = 24 }) {
+  const id = getEspnId(team)
+  const [failed, setFailed] = useState(!id)
+  const initials = (team || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const color = teamBadgeColor(team)
+  if (failed) {
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: Math.round(size * 0.18),
+        background: color + '22', border: `1px solid ${color}66`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, fontSize: Math.round(size * 0.38),
+        fontFamily: "'Oswald', sans-serif", fontWeight: 700, color,
+      }}>{initials}</div>
+    )
+  }
+  return (
+    <img
+      src={`https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png`}
+      alt={team} width={size} height={size}
+      onError={() => setFailed(true)}
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
+  )
+}
+
 // ── Shared components ──────────────────────────────────────────
 function Badge({ children, color = C.accent }) {
   return (
@@ -183,12 +259,18 @@ function ScoreTicker({ games, setTab, isMobile }) {
               onMouseEnter={e => e.currentTarget.style.background = C.subtle + '44'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: homeWon ? C.text : C.muted, fontSize: 11, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 85 }}>{g.home_team}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', maxWidth: 85 }}>
+                  <TeamLogo team={g.home_team} size={16} />
+                  <span style={{ color: homeWon ? C.text : C.muted, fontSize: 11, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.home_team}</span>
+                </div>
                 <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.home_score}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: !homeWon ? C.text : C.muted, fontSize: 11, fontWeight: !homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 85 }}>{g.away_team}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', maxWidth: 85 }}>
+                  <TeamLogo team={g.away_team} size={16} />
+                  <span style={{ color: !homeWon ? C.text : C.muted, fontSize: 11, fontWeight: !homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.away_team}</span>
+                </div>
                 <span style={{ fontFamily: "'Oswald', sans-serif", color: !homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.away_score}</span>
               </div>
               <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', fontFamily: "'Oswald', sans-serif" }}>WK {g.week} · FINAL</div>
@@ -681,20 +763,100 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
 }
 
 // ── Standings ──────────────────────────────────────────────────
-function Standings({ teams, isMobile }) {
-  // Sort: most wins first, then point differential as tiebreaker, then rank if set
+function Standings({ teams, isMobile, settings }) {
+  const [view, setView] = useState('records')
+
+  // ── Season Records view ────────────────────────────
   const sorted = [...teams].sort((a, b) =>
     b.wins - a.wins ||
     ((b.pts - b.pts_against) - (a.pts - a.pts_against)) ||
     (a.rank || 99) - (b.rank || 99)
   )
-  const PLAYOFF_LINE = 4 // top 4 make playoff
+  const PLAYOFF_LINE = 4
+
+  // ── AP Poll view ───────────────────────────────────
+  const apRankings = settings?.ap_rankings || []
 
   return (
     <div>
-      <SectionTitle isMobile={isMobile} sub="Current Season Records">Standings</SectionTitle>
-      {teams.length === 0
-        ? (
+      {/* Header + view toggle */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <SectionTitle isMobile={isMobile} sub={view === 'records' ? 'Current Season Records' : 'Associated Press Top 25 Poll'} style={{ margin: 0 }}>
+          {view === 'records' ? 'Standings' : 'AP Top 25'}
+        </SectionTitle>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <PillBtn small active={view === 'records'} onClick={() => setView('records')}>📊 Season Records</PillBtn>
+          <PillBtn small active={view === 'ap_poll'} onClick={() => setView('ap_poll')}>🗳️ AP Top 25</PillBtn>
+        </div>
+      </div>
+
+      {/* ── AP POLL VIEW ── */}
+      {view === 'ap_poll' && (
+        apRankings.length === 0 ? (
+          <Card>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🗳️</div>
+              <div style={{ color: C.muted, fontSize: 14, fontStyle: 'italic', lineHeight: 1.6 }}>
+                No AP Poll loaded yet. Sync a screenshot of the AP Top 25 from the Sync tab to populate this view. The poll updates automatically when a new screenshot is parsed.
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', background: C.surface, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>Associated Press · Top 25</span>
+              {settings?.ap_poll_updated_at && (
+                <span style={{ fontSize: 10, color: C.muted }}>Updated {new Date(settings.ap_poll_updated_at).toLocaleDateString()}</span>
+              )}
+            </div>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 340 : 'auto' }}>
+                <thead>
+                  <tr style={{ background: C.surface }}>
+                    {['Rank', 'Team', 'Record', 'Pts'].map(h => (
+                      <th key={h} style={{
+                        padding: isMobile ? '10px 10px' : '12px 16px',
+                        textAlign: h === 'Team' ? 'left' : 'center',
+                        color: C.muted, fontSize: 11,
+                        fontFamily: "'Oswald', sans-serif", letterSpacing: 1,
+                        textTransform: 'uppercase',
+                        borderBottom: `1px solid ${C.border}`,
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {apRankings.map((entry, i) => (
+                    <tr key={entry.rank ?? i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
+                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', width: 52 }}>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: entry.rank <= 5 ? C.accent : entry.rank <= 10 ? C.text : C.muted, fontWeight: 700 }}>{entry.rank}</span>
+                      </td>
+                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <TeamLogo team={entry.team_name} size={isMobile ? 22 : 26} />
+                          <span style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{entry.team_name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{entry.record || '—'}</td>
+                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontSize: 12 }}>{entry.points != null ? entry.points : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, background: C.surface + '88' }}>
+              <span style={{ fontSize: 10, color: C.subtle, fontStyle: 'italic' }}>
+                🔒 AP Poll updates automatically when a new poll screenshot is synced — cannot be edited manually.
+              </span>
+            </div>
+          </Card>
+        )
+      )}
+
+      {/* ── SEASON RECORDS VIEW ── */}
+      {view === 'records' && (
+        teams.length === 0 ? (
           <Card>
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
@@ -703,8 +865,7 @@ function Standings({ teams, isMobile }) {
               </div>
             </div>
           </Card>
-        )
-        : (
+        ) : (
           <Card style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 480 : 'auto' }}>
@@ -745,7 +906,10 @@ function Standings({ teams, isMobile }) {
                           <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: i < PLAYOFF_LINE ? C.accent : C.muted }}>{i + 1}</span>
                         </td>
                         <td style={{ padding: isMobile ? '10px 10px' : '13px 16px' }}>
-                          <span style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{t.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <TeamLogo team={t.name} size={isMobile ? 22 : 26} />
+                            <span style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{t.name}</span>
+                          </div>
                         </td>
                         <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', color: t.coach ? C.muted : C.subtle, fontSize: 12 }}>{t.coach || '—'}</td>
                         <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.green, fontFamily: "'Oswald', sans-serif", fontSize: 16 }}>{t.wins}</td>
@@ -770,7 +934,8 @@ function Standings({ teams, isMobile }) {
               </table>
             </div>
           </Card>
-        )}
+        )
+      )}
     </div>
   )
 }
@@ -1703,6 +1868,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
     { id: 'player_stats',label: '⭐ Player Stats',  desc: 'Stat leaders, individual numbers' },
     { id: 'recruiting',  label: '📋 Recruiting',   desc: 'Commitments, visits, offers' },
     { id: 'championship',label: '🏆 Championship', desc: 'Trophy screens, bowl/CFP results' },
+    { id: 'ap_poll',     label: '🗳️ AP Top 25',    desc: 'AP Top 25 poll screenshot — updates the Standings AP Poll view. Cannot be manually edited.' },
   ]
 
   // Pre-populate results from existing scan_log on mount
@@ -2423,7 +2589,7 @@ export default function App() {
           : (
             <>
               {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={fetchArticles} commPin={commPin} onArticleOpen={setOpenArticle} />}
-              {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} />}
+              {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
               {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}

@@ -113,7 +113,8 @@ export default async function handler(req, res) {
     const isGoogleDoc   = inputMimeType === 'application/vnd.google-apps.document'  || fileName?.toLowerCase().endsWith('.gdoc');
     const isGoogleSheet = inputMimeType === 'application/vnd.google-apps.spreadsheet' || fileName?.toLowerCase().endsWith('.gsheet');
 
-    const isScheduleImport = typeHint === 'schedule';
+    const isScheduleImport = typeHint === 'schedule'
+    const isApPollHint = typeHint === 'ap_poll';
 
     let parsedResult;
 
@@ -136,7 +137,7 @@ export default async function handler(req, res) {
     } else {
       // ── IMAGE PATH ────────────────────────────────────────────────────────
       const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
-      parsedResult = await parseImage(base64, mimeType, coaches, humanTeams, currentWeek);
+      parsedResult = await parseImage(base64, mimeType, coaches, humanTeams, currentWeek, typeHint);
     }
 
     // Save results to Supabase
@@ -381,10 +382,14 @@ Match team names to the known human coaches where possible.`;
 }
 
 // ─── Parse an Image ───────────────────────────────────────────────────────────
-async function parseImage(base64, mimeType, coaches, humanTeams, currentWeek) {
+async function parseImage(base64, mimeType, coaches, humanTeams, currentWeek, typeHint) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
 
-  const prompt = `You are analyzing a screenshot from EA Sports College Football (CFB) dynasty mode.
+  const typeHintLine = typeHint && typeHint !== 'auto'
+    ? `\nCOMMISSIONER TYPE HINT: "${typeHint}" — treat this as a strong signal for classification.`
+    : ''
+
+  const prompt = `You are analyzing a screenshot from EA Sports College Football (CFB) dynasty mode.${typeHintLine}
 
 ${CFB_SCHEDULE_CONTEXT}
 
@@ -395,13 +400,17 @@ IMPORTANT: Only process/save data that belongs to week ${currentWeek} or earlier
 
 STEP 1 — CLASSIFY: Determine exactly what type of screenshot this is:
 - "standings" — shows team win/loss records, conference standings
-- "rankings" — shows AP Poll, CFP Rankings, or any numbered team poll (e.g. "#1 Alabama, #2 Ohio State")
+- "ap_poll" — shows specifically the AP Top 25 Poll (Associated Press media poll, NOT CFP committee rankings)
+- "rankings" — shows CFP Rankings, CFP Top 25, or any numbered poll that is NOT the AP Poll
 - "scores" — shows game results, scoreboards, final scores
 - "stats" — shows player statistics, leaders, stat overlays
 - "championship" — shows a trophy, champion screen, title game result, bowl game winner, conference champion
 - "recruiting" — shows recruiting board, commitments, offers
 - "playoff_bracket" — shows CFP bracket or bowl game matchups
 - "unknown" — cannot determine or menu/loading screen
+
+IMPORTANT: If the typeHint is "ap_poll", classify this as "ap_poll" regardless of what you see.
+An "ap_poll" screenshot shows the Associated Press media poll ranking — it lists teams by rank number with records and poll points.
 
 STEP 2 — EXTRACT: Pull all visible data. Be precise with numbers. Only extract what you can clearly read.
 
@@ -433,10 +442,11 @@ Return ONLY a JSON object (no markdown, no explanation):
   "playoff_bracket": null
 }
 
-RANKINGS INSTRUCTIONS (type = "rankings"):
-- Extract every ranked team visible: rank number, team name, and record if shown
-- Use the "rankings" array above
+RANKINGS INSTRUCTIONS (type = "rankings" or "ap_poll"):
+- Extract every ranked team visible: rank number, team name, record if shown, and poll points if shown
+- Use the "rankings" array. For ap_poll type, include a "points" field per entry if visible.
 - Leave "games", "standings", "players" empty for a pure rankings screenshot
+- Example ap_poll entry: { "rank": 1, "team_name": "Alabama", "record": "5-0", "points": 1550 }
 
 For "championship": { "team_name": "", "coach_name": "", "record": "", "season": 0, "championship_type": "national|conference|bowl" }
 For "playoff_bracket": { "teams": [], "round": "" }
@@ -672,8 +682,25 @@ async function saveToSupabase(data, coaches, humanTeams) {
     if (!error) saved.championship = true;
   }
 
-  // Save poll rankings → update rank column on teams
-  if (data.rankings?.length > 0) {
+  // Save AP Poll → league_settings.ap_rankings (read-only in UI, only updated via screenshot)
+  if (data.type === 'ap_poll' && data.rankings?.length > 0) {
+    const apEntries = data.rankings.map(e => ({
+      rank:      e.rank,
+      team_name: e.team_name,
+      record:    e.record ?? null,
+      points:    e.points ?? null,
+    }));
+    await supabase.from('league_settings').upsert({
+      id:                 1,
+      ap_rankings:        apEntries,
+      ap_poll_updated_at: new Date().toISOString(),
+      updated_at:         new Date().toISOString(),
+    }, { onConflict: 'id' });
+    saved.rankings = apEntries.length;
+  }
+
+  // Save CFP/game poll rankings → update rank column on teams
+  if (data.type !== 'ap_poll' && data.rankings?.length > 0) {
     for (const entry of data.rankings) {
       if (!entry.team_name || entry.rank == null) continue;
       const season = data.season ?? 1;
