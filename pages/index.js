@@ -128,197 +128,375 @@ function BottomNav({ tab, setTab }) {
   )
 }
 
-// ── Dashboard ──────────────────────────────────────────────────
-function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings }) {
-  const finalGames  = games.filter(g => g.status === 'Final')
-  const recentGames = [...finalGames].reverse().slice(0, 3)
+// ── Score Ticker ────────────────────────────────────────────────
+function ScoreTicker({ games, setTab, isMobile }) {
+  const finalGames = [...games].filter(g => g.status === 'Final' || g.is_final).reverse().slice(0, 14)
+  if (finalGames.length === 0) return null
+
+  return (
+    <div style={{
+      background: '#07070c',
+      borderBottom: `1px solid ${C.border}`,
+      position: 'sticky', top: isMobile ? 57 : 69, zIndex: 90,
+    }}>
+      <style>{`.ticker-strip::-webkit-scrollbar { display: none; }`}</style>
+      <div className="ticker-strip" style={{
+        display: 'flex', overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none', msOverflowStyle: 'none',
+      }}>
+        {/* "SCORES" label */}
+        <div style={{
+          flexShrink: 0, padding: isMobile ? '7px 12px' : '8px 16px',
+          background: C.accent,
+          display: 'flex', alignItems: 'center',
+          fontFamily: "'Oswald', sans-serif",
+          fontSize: 10, fontWeight: 700, letterSpacing: 2.5, color: '#000',
+          textTransform: 'uppercase', whiteSpace: 'nowrap',
+        }}>SCORES</div>
+
+        {finalGames.map((g, i) => {
+          const homeWon = g.home_score > g.away_score
+          return (
+            <div
+              key={g.id || i}
+              onClick={() => setTab('Season')}
+              style={{
+                flexShrink: 0, padding: isMobile ? '5px 12px' : '6px 16px',
+                borderRight: `1px solid ${C.border}`,
+                cursor: 'pointer', minWidth: isMobile ? 120 : 140,
+                display: 'flex', flexDirection: 'column', gap: 1,
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = C.subtle + '44'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: homeWon ? C.text : C.muted, fontSize: 11, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 85 }}>{g.home_team}</span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.home_score}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: !homeWon ? C.text : C.muted, fontSize: 11, fontWeight: !homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 85 }}>{g.away_team}</span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", color: !homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.away_score}</span>
+              </div>
+              <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', fontFamily: "'Oswald', sans-serif" }}>WK {g.week} · FINAL</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Dashboard (ESPN Style) ─────────────────────────────────────
+function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab }) {
+  const finalGames  = games.filter(g => g.status === 'Final' || g.is_final)
+  const heroGame    = [...finalGames].reverse()[0]
   const currentWeek = settings?.current_week ?? 0
 
-  // Power Rankings: use explicit rank when set, fall back to wins → point diff
   const rankedTeams = [...teams].sort((a, b) => {
     const aRank = a.rank ?? 9999
     const bRank = b.rank ?? 9999
     if (aRank !== bRank) return aRank - bRank
     return (b.wins - a.wins) || ((b.pts - b.pts_against) - (a.pts - a.pts_against))
   })
-  const topTeam     = rankedTeams.find(t => (t.wins > 0) || t.rank) || (teams.length > 0 ? rankedTeams[0] : null)
+
   const topPasser   = players.find(p => p.pos === 'QB')
   const topRusher   = players.find(p => p.pos === 'RB')
   const topReceiver = players.find(p => p.pos === 'WR')
 
-  const statCards = [
-    { label: 'Current Week', value: `Wk ${currentWeek}`, icon: '📅' },
-    { label: '#1 Ranked',    value: topTeam?.name || '—', icon: '🏆' },
-    { label: 'Teams',        value: teams.length || '—',  icon: '🏟️' },
-    { label: 'Games Played', value: finalGames.length,    icon: '🏈' },
-  ]
+  const heroHomeWon = heroGame && heroGame.home_score > heroGame.away_score
+  const heroAwayWon = heroGame && heroGame.away_score > heroGame.home_score
+
+  // Section label helper
+  const SectionLabel = ({ color = C.accent, children }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      <div style={{ width: 4, height: 18, background: color, borderRadius: 2, flexShrink: 0 }} />
+      <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: 'uppercase' }}>{children}</span>
+    </div>
+  )
 
   return (
     <div>
-      <SectionTitle isMobile={isMobile} sub={`Live Season Overview · ${teams.length} Teams`}>Dynasty Universe</SectionTitle>
 
-      {/* Stat cards — 4 col desktop / 2 col mobile */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)',
-        gap: isMobile ? 8 : 12,
-        marginBottom: 20,
-      }}>
-        {statCards.map(s => (
-          <Card key={s.label} style={{ textAlign: 'center', padding: isMobile ? '12px 8px' : 16 }}>
-            <div style={{ fontSize: isMobile ? 22 : 28, marginBottom: 6 }}>{s.icon}</div>
+      {/* ── HERO: Latest Game Result ── */}
+      <div style={{ marginBottom: 28 }}>
+        <SectionLabel color={C.accent}>
+          {heroGame ? `Latest Result · Week ${heroGame.week}` : 'Latest Result'}
+        </SectionLabel>
+
+        {heroGame ? (
+          <div style={{
+            background: `linear-gradient(135deg, #12121a 0%, #0c0c13 60%, #14101a 100%)`,
+            border: `1px solid ${C.border}`,
+            borderLeft: `4px solid ${C.accent}`,
+            borderRadius: 12,
+            padding: isMobile ? '20px 18px' : '32px 40px',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Subtle diagonal texture */}
             <div style={{
-              fontFamily: "'Oswald', sans-serif",
-              fontSize: isMobile ? 18 : 24,
-              color: C.accent, fontWeight: 700,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{s.value}</div>
+              position: 'absolute', inset: 0, opacity: 0.025,
+              background: 'repeating-linear-gradient(45deg, #c9a84c 0px, #c9a84c 1px, transparent 1px, transparent 22px)',
+              pointerEvents: 'none',
+            }} />
+
+            {/* FINAL badge */}
             <div style={{
-              color: C.muted, fontSize: 10,
-              textTransform: 'uppercase', letterSpacing: 1, marginTop: 4,
-            }}>{s.label}</div>
-          </Card>
-        ))}
-      </div>
+              position: 'absolute', top: isMobile ? 14 : 22, right: isMobile ? 14 : 28,
+              background: C.accent + '20', color: C.accent,
+              border: `1px solid ${C.accent}55`,
+              fontFamily: "'Oswald', sans-serif", fontSize: 10,
+              letterSpacing: 3, padding: '4px 14px', borderRadius: 4,
+              textTransform: 'uppercase',
+            }}>FINAL</div>
 
-      {/* Power Rankings + Recent Results — 2 col desktop / 1 col mobile */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-        gap: 16, marginBottom: 16,
-      }}>
-        <Card>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
-            ⚔️ Power Rankings
-          </div>
-          {teams.length === 0 && (
-            <div style={{ color: C.muted, fontSize: 13, fontStyle: 'italic' }}>
-              No dynasties have emerged yet. Sync your first screenshot to start the chronicle.
-            </div>
-          )}
-          {rankedTeams.slice(0, 5).map((t, i) => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < 4 ? `1px solid ${C.border}` : 'none' }}>
-              <div style={{ width: 32, textAlign: 'center', flexShrink: 0 }}>
-                <span style={{
-                  fontFamily: "'Oswald', sans-serif", fontSize: 20,
-                  color: i === 0 ? C.accent : C.muted,
-                }}>
-                  {t.rank ?? (i + 1)}
-                </span>
-                {t.rank && <div style={{ fontSize: 8, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 1 }}>poll</div>}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: C.text, fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
-                <div style={{ color: C.muted, fontSize: 12 }}>{t.coach || '—'}</div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: "'Oswald', sans-serif", color: C.text, fontSize: 14 }}>{t.wins}-{t.losses}</div>
-                {t.streak && t.streak !== 'unknown' && t.streak !== '—' && /^[WL]\d+$/.test(t.streak) && (
-                  <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
-                )}
-              </div>
-            </div>
-          ))}
-        </Card>
-
-        <Card>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
-            🏈 Recent Results
-          </div>
-          {recentGames.length === 0 && (
-            <div style={{ color: C.muted, fontSize: 13, fontStyle: 'italic' }}>
-              The scoreboard is silent. Your first battle results will appear here.
-            </div>
-          )}
-          {recentGames.map(g => (
-            <div key={g.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: g.home_score > g.away_score ? C.text : C.muted, fontWeight: g.home_score > g.away_score ? 700 : 400, fontSize: 14 }}>{g.home_team}</span>
-                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.accent }}>{g.home_score}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                <span style={{ color: g.away_score > g.home_score ? C.text : C.muted, fontWeight: g.away_score > g.home_score ? 700 : 400, fontSize: 14 }}>{g.away_team}</span>
-                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.accent }}>{g.away_score}</span>
-              </div>
-              <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>Week {g.week}</div>
-            </div>
-          ))}
-        </Card>
-      </div>
-
-      {/* Stat Leaders — 3 col desktop / 1 col mobile */}
-      <Card style={{ marginBottom: 16 }}>
-        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>⭐ Stat Leaders</div>
-        {players.length === 0
-          ? <div style={{ color: C.muted, fontSize: 13, fontStyle: 'italic' }}>
-              No legends have been written yet. Scan a player stats screenshot to begin.
-            </div>
-          : (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap: 16 }}>
-              {[
-                { label: 'Passing Yards',   player: topPasser,   stat: topPasser?.stats?.pass_yds },
-                { label: 'Rushing Yards',   player: topRusher,   stat: topRusher?.stats?.rush_yds },
-                { label: 'Receiving Yards', player: topReceiver, stat: topReceiver?.stats?.rec_yds },
-              ].filter(x => x.player).map(x => (
-                <div key={x.label}>
-                  <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{x.label}</div>
-                  <div style={{ color: C.text, fontWeight: 700 }}>{x.player.name}</div>
-                  <div style={{ color: C.muted, fontSize: 12 }}>{x.player.team}</div>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 24 : 32, color: C.accent }}>{x.stat?.toLocaleString()}</div>
+            <div style={{ position: 'relative' }}>
+              {/* Home team */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 10, opacity: heroHomeWon ? 1 : 0.45,
+              }}>
+                <div>
+                  <div style={{
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: isMobile ? 22 : 38, fontWeight: 700,
+                    color: C.text, letterSpacing: 0.5,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    maxWidth: isMobile ? 200 : 480,
+                  }}>{heroGame.home_team}</div>
+                  {heroHomeWon && (
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 3 }}>🏆 WINNER</div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-      </Card>
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: isMobile ? 52 : 80, fontWeight: 700,
+                  color: heroHomeWon ? C.accent : '#3a3a4a',
+                  lineHeight: 1, flexShrink: 0, marginLeft: 16,
+                }}>{heroGame.home_score}</div>
+              </div>
 
-      {/* Dynasty Chronicle — narrative events */}
-      {narrativeEntries?.length > 0 && (
-        <Card style={{ marginBottom: 16, borderColor: C.purple + '44' }}>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.purple, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
-            📖 Dynasty Chronicle
+              {/* VS divider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3 }}>VS</span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+              </div>
+
+              {/* Away team */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                opacity: heroAwayWon ? 1 : 0.45,
+              }}>
+                <div>
+                  <div style={{
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: isMobile ? 22 : 38, fontWeight: 700,
+                    color: C.text, letterSpacing: 0.5,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    maxWidth: isMobile ? 200 : 480,
+                  }}>{heroGame.away_team}</div>
+                  {heroAwayWon && (
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 3 }}>🏆 WINNER</div>
+                  )}
+                </div>
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: isMobile ? 52 : 80, fontWeight: 700,
+                  color: heroAwayWon ? C.accent : '#3a3a4a',
+                  lineHeight: 1, flexShrink: 0, marginLeft: 16,
+                }}>{heroGame.away_score}</div>
+              </div>
+            </div>
+
+            {/* Footer: see all scores CTA */}
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setTab('Season')} style={{
+                background: 'transparent', color: C.accent,
+                border: `1px solid ${C.accent}44`,
+                borderRadius: 6, padding: '6px 16px',
+                cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+                fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase',
+                transition: 'all 0.15s',
+              }}>See All Scores →</button>
+            </div>
           </div>
-          {narrativeEntries.slice(0, 4).map((entry, i) => (
-            <div key={entry.id || i} style={{
-              padding: '10px 0',
-              borderBottom: i < Math.min(narrativeEntries.length, 4) - 1 ? `1px solid ${C.border}` : 'none',
-              display: 'flex', gap: 12, alignItems: 'flex-start',
-            }}>
-              <span style={{ fontSize: 18, flexShrink: 0 }}>
-                {entry.event_type === 'game' ? '🏈' : entry.event_type === 'recruiting' ? '📋' : '📌'}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: C.text, fontSize: 13, fontWeight: 700 }}>{entry.title}</div>
-                <div style={{ color: C.muted, fontSize: 12, marginTop: 2, lineHeight: 1.5 }}>{entry.summary}</div>
-                {entry.week && <div style={{ color: C.subtle, fontSize: 10, marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Week {entry.week}</div>}
-              </div>
-              {entry.narrative_weight >= 4 && (
-                <Badge color={C.accent}>🔥 Big</Badge>
-              )}
-            </div>
-          ))}
-        </Card>
-      )}
+        ) : (
+          <Card style={{ textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed', borderColor: C.border }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🏟️</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.muted, letterSpacing: 1 }}>No Results Yet</div>
+            <div style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>Sync your first game screenshot to see scores here</div>
+          </Card>
+        )}
+      </div>
 
-      {/* Recent Syncs */}
-      {scanLog?.length > 0 && (
-        <Card>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Recent Syncs</div>
-          {scanLog.slice(0, 5).map((log, i) => (
-            <div key={i} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              fontSize: 12, padding: '6px 0',
-              borderBottom: i < 4 ? `1px solid ${C.border}` : 'none',
-              flexWrap: 'wrap', gap: 6,
-            }}>
-              <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 130 : 'none' }}>{log.file_name}</span>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                {log.data_type && <Badge color={C.blue}>{log.data_type}</Badge>}
-                {log.records_parsed > 0 && <span style={{ color: C.green }}>{log.records_parsed} records</span>}
-                <span style={{ color: C.muted, fontSize: 10 }}>{new Date(log.created_at).toLocaleDateString()}</span>
+      {/* ── THREE-COLUMN CONTENT GRID ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '280px 1fr 260px',
+        gap: 20, marginBottom: 24,
+        alignItems: 'start',
+      }}>
+
+        {/* LEFT: Top Teams */}
+        <div>
+          <SectionLabel color={C.accent}>Top Teams</SectionLabel>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {teams.length === 0 ? (
+              <div style={{ padding: '20px 16px', color: C.muted, fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>
+                Sync standings to see your power rankings
               </div>
+            ) : (
+              rankedTeams.slice(0, 8).map((t, i) => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center',
+                  padding: '11px 14px',
+                  borderBottom: i < Math.min(rankedTeams.length, 8) - 1 ? `1px solid ${C.border}` : 'none',
+                  background: i === 0 ? C.accent + '09' : 'transparent',
+                  gap: 10,
+                }}>
+                  <div style={{
+                    width: 24, flexShrink: 0, textAlign: 'center',
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: i === 0 ? 20 : 15,
+                    color: i === 0 ? C.accent : C.muted,
+                    fontWeight: 700, lineHeight: 1,
+                  }}>{t.rank ?? (i + 1)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: C.text, fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                    <div style={{ color: C.muted, fontSize: 11 }}>{t.coach || 'No coach'}</div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.text }}>{t.wins}-{t.losses}</div>
+                    {t.streak && t.streak !== 'unknown' && t.streak !== '—' && /^[WL]\d+$/.test(t.streak) && (
+                      <Badge color={t.streak.startsWith('W') ? C.green : C.red}>{t.streak}</Badge>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </Card>
+        </div>
+
+        {/* CENTER: Dynasty News + Quick Stats */}
+        <div>
+          <SectionLabel color={C.purple}>Dynasty News</SectionLabel>
+
+          {/* Quick stats strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
+            {[
+              { label: 'Current Week', value: `Wk ${currentWeek}` },
+              { label: 'Teams', value: teams.length || '—' },
+              { label: 'Games Played', value: finalGames.length || '—' },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+              }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 20 : 24, color: C.accent, fontWeight: 700, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ color: C.muted, fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Chronicle as editorial news cards */}
+          {narrativeEntries?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {narrativeEntries.slice(0, 5).map((entry, i) => {
+                const isTop = i === 0
+                const icon = entry.event_type === 'game' ? '🏈' : entry.event_type === 'recruiting' ? '📋' : '📌'
+                return (
+                  <Card key={entry.id || i} style={{
+                    padding: '14px 16px',
+                    borderLeft: `3px solid ${isTop ? C.accent : C.border}`,
+                    background: isTop ? C.accent + '07' : C.card,
+                  }}>
+                    {isTop && (
+                      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.accent, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 5 }}>
+                        📰 Top Story
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: C.text, fontSize: isTop ? 15 : 13, fontWeight: 700, lineHeight: 1.35, marginBottom: 4 }}>{entry.title}</div>
+                        <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.55 }}>{entry.summary}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                          {entry.week && <span style={{ color: C.muted, fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>Week {entry.week}</span>}
+                          {entry.narrative_weight >= 4 && <Badge color={C.accent}>🔥 Big</Badge>}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
             </div>
-          ))}
-        </Card>
+          ) : (
+            <Card style={{ padding: '30px 20px', textAlign: 'center', borderStyle: 'dashed', borderColor: C.border }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>📰</div>
+              <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
+                Stories will appear here as you play games and sync data to the chronicle
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* RIGHT: Stat Leaders */}
+        <div>
+          <SectionLabel color={C.green}>Stat Leaders</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {players.length === 0 ? (
+              <Card style={{ padding: '24px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>⭐</div>
+                <div style={{ color: C.muted, fontSize: 13 }}>Sync player stats to see leaders</div>
+              </Card>
+            ) : (
+              [
+                { label: 'Passing',   icon: '🎯', player: topPasser,   stat: topPasser?.stats?.pass_yds,   color: C.blue   },
+                { label: 'Rushing',   icon: '💨', player: topRusher,   stat: topRusher?.stats?.rush_yds,   color: C.green  },
+                { label: 'Receiving', icon: '🙌', player: topReceiver, stat: topReceiver?.stats?.rec_yds,  color: C.purple },
+              ].filter(x => x.player).map(x => (
+                <Card key={x.label} style={{ padding: '14px 16px', borderLeft: `3px solid ${x.color}` }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: x.color, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>
+                    {x.icon} {x.label}
+                  </div>
+                  <div style={{ color: C.text, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.player.name}</div>
+                  <div style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>{x.player.team}</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 28 : 32, color: x.color, lineHeight: 1 }}>
+                    {x.stat?.toLocaleString()}
+                    <span style={{ fontSize: 11, color: C.muted, marginLeft: 5, fontFamily: "'Lato', sans-serif", fontWeight: 400 }}>YDS</span>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── RECENT SYNCS (compact, only if data exists) ── */}
+      {scanLog?.length > 0 && (
+        <div>
+          <SectionLabel color={C.blue}>Recent Syncs</SectionLabel>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {scanLog.slice(0, 5).map((log, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 16px',
+                borderBottom: i < Math.min(scanLog.length, 5) - 1 ? `1px solid ${C.border}` : 'none',
+                flexWrap: 'wrap', gap: 6,
+              }}>
+                <span style={{ color: C.text, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 140 : 300 }}>{log.file_name}</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  {log.data_type && <Badge color={C.blue}>{log.data_type}</Badge>}
+                  {log.records_parsed > 0 && <span style={{ color: C.green, fontSize: 12 }}>{log.records_parsed} records</span>}
+                  <span style={{ color: C.muted, fontSize: 10 }}>{new Date(log.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </div>
       )}
     </div>
   )
@@ -1573,6 +1751,11 @@ export default function App() {
         </div>
       </div>
 
+      {/* Score Ticker — only on the home tab */}
+      {!loadingData && tab === 'Dashboard' && (
+        <ScoreTicker games={data.games} setTab={setTab} isMobile={isMobile} />
+      )}
+
       {/* Main content */}
       <div style={{
         maxWidth: 1160, margin: '0 auto',
@@ -1587,7 +1770,7 @@ export default function App() {
           )
           : (
             <>
-              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}
