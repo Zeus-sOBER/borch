@@ -191,10 +191,11 @@ function ScoreTicker({ games, setTab, isMobile }) {
 
 // ── Dashboard (ESPN Style) ─────────────────────────────────────
 const ARTICLE_TYPE_LABELS = {
-  'power-rankings':    { label: 'Power Rankings', icon: '🏆' },
-  'weekly-recap':      { label: 'Weekly Recap',   icon: '📋' },
-  'player-spotlight':  { label: 'Player Spotlight', icon: '⭐' },
+  'power-rankings':    { label: 'Power Rankings',    icon: '🏆' },
+  'weekly-recap':      { label: 'Weekly Recap',      icon: '📋' },
+  'player-spotlight':  { label: 'Player Spotlight',  icon: '⭐' },
   'rivalry-breakdown': { label: 'Rivalry Breakdown', icon: '🔥' },
+  'matchup-preview':   { label: 'Matchup Preview',   icon: '🏈' },
 }
 
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen }) {
@@ -1953,9 +1954,83 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
 }
 
 // ── Matchups Tab ───────────────────────────────────────────────
-function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen }) {
+function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen, commPin, onPinSet }) {
   const finalGames    = games.filter(g => g.is_final || g.status === 'Final')
   const upcomingGames = games.filter(g => !g.is_final && g.status !== 'Final' && g.home_team && g.away_team)
+
+  // Generate state (keyed by "HomeTeam|AwayTeam|Week")
+  const [generating,    setGenerating]    = useState(null)
+  const [genError,      setGenError]      = useState({})
+  const [pinInput,      setPinInput]      = useState('')
+  const [pinError,      setPinError]      = useState('')
+  const [showPinFor,    setShowPinFor]    = useState(null) // game key
+
+  const gameKey = (g) => `${g.home_team}|${g.away_team}|${g.week}`
+
+  const generatePreview = async (g, pin) => {
+    const key = gameKey(g)
+    setGenerating(key)
+    setGenError(e => ({ ...e, [key]: null }))
+    try {
+      const res  = await fetch('/api/generate-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleType: 'matchup-preview',
+          homeTeam: g.home_team,
+          awayTeam: g.away_team,
+          week: g.week,
+          pin,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setGenError(e => ({ ...e, [key]: data.error || 'Generation failed' }))
+        return
+      }
+      // Open the article right away
+      if (onArticleOpen) {
+        onArticleOpen({
+          title: `Matchup Preview: ${g.home_team} vs ${g.away_team}${g.week ? ` — Week ${g.week}` : ''}`,
+          article_type: 'matchup-preview',
+          week: g.week,
+          content: data.article,
+        })
+      }
+    } catch (e) {
+      setGenError(err => ({ ...err, [key]: 'Something went wrong. Try again.' }))
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  const handleGenerate = (g) => {
+    const key = gameKey(g)
+    if (commPin) {
+      generatePreview(g, commPin)
+    } else {
+      setShowPinFor(showPinFor === key ? null : key)
+      setPinInput('')
+      setPinError('')
+    }
+  }
+
+  const submitPin = (g) => {
+    if (!pinInput.trim()) return
+    const key = gameKey(g)
+    setPinError('')
+    // Verify PIN via the coaches endpoint then generate
+    fetch('/api/coaches/0', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinInput }),
+    }).then(r => {
+      if (r.status === 403) { setPinError('Wrong PIN'); return }
+      if (onPinSet) onPinSet(pinInput)
+      setShowPinFor(null)
+      generatePreview(g, pinInput)
+    }).catch(() => setPinError('Something went wrong'))
+  }
 
   const getH2H = (a, b) =>
     finalGames
@@ -2090,6 +2165,64 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
             </div>
           </div>
         )}
+
+        {/* Generate Preview Article */}
+        {(() => {
+          const key = gameKey(g)
+          const isGeneratingThis = generating === key
+          const err = genError[key]
+          const showPin = showPinFor === key
+          return (
+            <div style={{ borderTop: `1px solid ${C.border}`, padding: '14px 20px', background: C.surface + 'aa' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => handleGenerate(g)}
+                  disabled={isGeneratingThis}
+                  style={{
+                    background: isGeneratingThis ? C.subtle : commPin ? C.accent + '18' : 'transparent',
+                    color: isGeneratingThis ? C.muted : commPin ? C.accent : C.muted,
+                    border: `1px solid ${isGeneratingThis ? C.border : commPin ? C.accent + '55' : C.border}`,
+                    borderRadius: 7, padding: '9px 18px',
+                    cursor: isGeneratingThis ? 'not-allowed' : 'pointer',
+                    fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1,
+                    textTransform: 'uppercase', whiteSpace: 'nowrap', minHeight: 38,
+                  }}
+                >
+                  {isGeneratingThis ? '⏳ Generating… ~20s' : '✦ Generate Preview Article'}
+                </button>
+                {!commPin && !showPin && (
+                  <span style={{ color: C.subtle, fontSize: 11 }}>Commissioner only</span>
+                )}
+              </div>
+
+              {/* Inline PIN entry */}
+              {showPin && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="password"
+                    placeholder="Commissioner PIN"
+                    value={pinInput}
+                    onChange={e => { setPinInput(e.target.value); setPinError('') }}
+                    onKeyDown={e => e.key === 'Enter' && submitPin(g)}
+                    style={{ flex: 1, minWidth: 130, background: C.card, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 6, padding: '8px 12px', color: C.text, fontSize: 13 }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => submitPin(g)}
+                    style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}
+                  >Generate →</button>
+                  <button
+                    onClick={() => { setShowPinFor(null); setPinError('') }}
+                    style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}
+                  >Cancel</button>
+                  {pinError && <span style={{ color: C.red, fontSize: 12, width: '100%' }}>❌ {pinError}</span>}
+                </div>
+              )}
+
+              {err && <div style={{ marginTop: 8, color: C.red, fontSize: 12 }}>❌ {err}</div>}
+            </div>
+          )
+        })()}
       </Card>
     )
   }
@@ -2279,7 +2412,7 @@ export default function App() {
               {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={fetchArticles} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
-              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} />}
+              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
               {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}
               {tab === 'Media'     && (
                 <MediaCenter
