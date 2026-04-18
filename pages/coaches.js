@@ -344,6 +344,14 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }
   const [form,    setForm]      = useState({ ...coach })
   const [error,   setError]     = useState(null)
 
+  // Auto-link team_id if coach has a team name but no team_id yet
+  useEffect(() => {
+    if (form.team && !form.team_id && teams.length > 0) {
+      const match = teams.find(t => (t.name || '').toLowerCase() === form.team.toLowerCase())
+      if (match) setForm(f => ({ ...f, team_id: match.id }))
+    }
+  }, [teams])
+
   const field = (key) => ({
     value: form[key] ?? '',
     onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),

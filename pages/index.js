@@ -1077,8 +1077,8 @@ function ShareCard({ game, onClose }) {
       }}
     >
       {/* Hint */}
-      <div style={{ color: C.muted, fontSize: 12, marginBottom: 16, letterSpacing: 1, fontFamily: "'Oswald', sans-serif", textTransform: 'uppercase' }}>
-        📸 Screenshot to share · Tap anywhere to close
+      <div style={{ color: C.muted, fontSize: 11, marginBottom: 16, letterSpacing: 2, fontFamily: "'Oswald', sans-serif", textTransform: 'uppercase' }}>
+        SCREENSHOT TO SHARE · TAP ANYWHERE TO CLOSE
       </div>
 
       {/* The shareable card — designed for portrait phone screenshots */}
@@ -1118,78 +1118,104 @@ function ShareCard({ game, onClose }) {
           )}
         </div>
 
-        {/* Winner team */}
+        {/* Home team row */}
         <div style={{
-          background: homeWon ? C.accent + '15' : awayWon ? C.accent + '15' : C.surface,
-          borderRadius: 12, padding: '20px 20px',
+          background: homeWon ? 'linear-gradient(90deg, ' + C.accent + '18 0%, transparent 100%)' : C.surface,
+          borderRadius: 12, padding: '16px 20px',
           marginBottom: 4,
-          border: `1px solid ${(homeWon || awayWon) ? C.accent + '44' : C.border}`,
+          border: `1px solid ${homeWon ? C.accent + '55' : C.border}`,
+          position: 'relative', overflow: 'hidden',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: "'Oswald', sans-serif",
-                fontSize: homeWon ? 26 : 22,
-                fontWeight: 700,
-                color: homeWon ? C.text : C.muted,
-                lineHeight: 1.1,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{game.home_team}</div>
-              <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginTop: 3 }}>
-                {homeWon ? '🏆 Winner · Home' : 'Home'}
+          {homeWon && (
+            <div style={{
+              position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+              background: C.accent, borderRadius: '12px 0 0 12px',
+            }} />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+              <TeamLogo team={game.home_team} size={36} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: homeWon ? 22 : 19,
+                  fontWeight: 700,
+                  color: homeWon ? C.text : C.muted,
+                  lineHeight: 1.1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{game.home_team}</div>
+                <div style={{ fontSize: 10, letterSpacing: 2, marginTop: 3, textTransform: 'uppercase',
+                  color: homeWon ? C.accent : C.muted, fontFamily: "'Oswald', sans-serif",
+                }}>
+                  {homeWon ? 'WINNER' : 'HOME'}
+                </div>
               </div>
             </div>
             {isFinal && (
               <div style={{
                 fontFamily: "'Oswald', sans-serif",
-                fontSize: homeWon ? 52 : 40,
-                color: homeWon ? C.accent : C.muted,
-                lineHeight: 1, flexShrink: 0, marginLeft: 12,
+                fontSize: homeWon ? 50 : 38,
+                color: homeWon ? C.accent : '#555566',
+                lineHeight: 1, flexShrink: 0,
+                textShadow: homeWon ? `0 0 30px ${C.accent}66` : 'none',
               }}>{game.home_score}</div>
             )}
           </div>
         </div>
 
-        {/* VS divider */}
-        <div style={{ textAlign: 'center', padding: '8px 0', position: 'relative' }}>
+        {/* Divider */}
+        <div style={{ textAlign: 'center', padding: '6px 0', position: 'relative' }}>
           <div style={{ position: 'absolute', left: 20, right: 20, top: '50%', height: 1, background: C.border }} />
           <span style={{
             position: 'relative', background: '#0d0d12',
-            padding: '0 12px',
-            fontFamily: "'Oswald', sans-serif", fontSize: 12,
-            color: C.muted, letterSpacing: 3,
+            padding: '0 14px',
+            fontFamily: "'Oswald', sans-serif", fontSize: 11,
+            color: C.muted, letterSpacing: 4,
           }}>
             {isFinal ? 'FINAL' : 'VS'}
           </span>
         </div>
 
-        {/* Away team */}
+        {/* Away team row */}
         <div style={{
-          background: awayWon ? C.accent + '15' : C.surface,
-          borderRadius: 12, padding: '20px 20px',
+          background: awayWon ? 'linear-gradient(90deg, ' + C.accent + '18 0%, transparent 100%)' : C.surface,
+          borderRadius: 12, padding: '16px 20px',
           marginTop: 4,
-          border: `1px solid ${awayWon ? C.accent + '44' : C.border}`,
+          border: `1px solid ${awayWon ? C.accent + '55' : C.border}`,
+          position: 'relative', overflow: 'hidden',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: "'Oswald', sans-serif",
-                fontSize: awayWon ? 26 : 22,
-                fontWeight: 700,
-                color: awayWon ? C.text : C.muted,
-                lineHeight: 1.1,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{game.away_team}</div>
-              <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginTop: 3 }}>
-                {awayWon ? '🏆 Winner · Away' : 'Away'}
+          {awayWon && (
+            <div style={{
+              position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+              background: C.accent, borderRadius: '12px 0 0 12px',
+            }} />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+              <TeamLogo team={game.away_team} size={36} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: awayWon ? 22 : 19,
+                  fontWeight: 700,
+                  color: awayWon ? C.text : C.muted,
+                  lineHeight: 1.1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{game.away_team}</div>
+                <div style={{ fontSize: 10, letterSpacing: 2, marginTop: 3, textTransform: 'uppercase',
+                  color: awayWon ? C.accent : C.muted, fontFamily: "'Oswald', sans-serif",
+                }}>
+                  {awayWon ? 'WINNER' : 'AWAY'}
+                </div>
               </div>
             </div>
             {isFinal && (
               <div style={{
                 fontFamily: "'Oswald', sans-serif",
-                fontSize: awayWon ? 52 : 40,
-                color: awayWon ? C.accent : C.muted,
-                lineHeight: 1, flexShrink: 0, marginLeft: 12,
+                fontSize: awayWon ? 50 : 38,
+                color: awayWon ? C.accent : '#555566',
+                lineHeight: 1, flexShrink: 0,
+                textShadow: awayWon ? `0 0 30px ${C.accent}66` : 'none',
               }}>{game.away_score}</div>
             )}
           </div>

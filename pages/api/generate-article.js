@@ -88,6 +88,7 @@ export default async function handler(req, res) {
     const { data: coaches, error: coachErr } = await supabase
       .from('coaches')
       .select('*')
+      .eq('is_active', true)
       .order('created_at', { ascending: true });
 
     if (coachErr) throw coachErr;
