@@ -1,3 +1,4 @@
+// v2 redesign — inline PIN bar, articles first, generator at bottom
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
