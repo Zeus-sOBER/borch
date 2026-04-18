@@ -27,15 +27,18 @@ export default async function handler(req, res) {
 
   // ── PATCH: update settings (commissioner PIN required) ───────────────────
   if (req.method === 'PATCH') {
-    const { pin, current_week, current_season } = req.body || {}
+    const { pin, current_week, current_season, featured_article_id, hero_image_id, hero_image_mime } = req.body || {}
 
     if (pin !== process.env.COMMISSIONER_PIN) {
       return res.status(403).json({ error: 'Invalid commissioner PIN' })
     }
 
     const updates = { updated_at: new Date().toISOString() }
-    if (current_week  !== undefined) updates.current_week  = current_week
-    if (current_season !== undefined) updates.current_season = current_season
+    if (current_week        !== undefined) updates.current_week        = current_week
+    if (current_season      !== undefined) updates.current_season      = current_season
+    if (featured_article_id !== undefined) updates.featured_article_id = featured_article_id
+    if (hero_image_id       !== undefined) updates.hero_image_id       = hero_image_id
+    if (hero_image_mime     !== undefined) updates.hero_image_mime     = hero_image_mime
 
     const { data, error } = await db
       .from('league_settings')
