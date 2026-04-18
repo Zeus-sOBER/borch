@@ -129,19 +129,25 @@ function BottomNav({ tab, setTab }) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────
-function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries }) {
+function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings }) {
   const finalGames  = games.filter(g => g.status === 'Final')
   const recentGames = [...finalGames].reverse().slice(0, 3)
-  // Only show #1 ranked if we have actual game data to rank by
-  const rankedTeams = [...teams].sort((a, b) => b.wins - a.wins || (b.pts - b.pts_against) - (a.pts - a.pts_against))
-  const topTeam     = finalGames.length > 0 ? rankedTeams[0] : null
-  const weeks       = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(w => w != null)) : 0
+  const currentWeek = settings?.current_week ?? 0
+
+  // Power Rankings: use explicit rank when set, fall back to wins → point diff
+  const rankedTeams = [...teams].sort((a, b) => {
+    const aRank = a.rank ?? 9999
+    const bRank = b.rank ?? 9999
+    if (aRank !== bRank) return aRank - bRank
+    return (b.wins - a.wins) || ((b.pts - b.pts_against) - (a.pts - a.pts_against))
+  })
+  const topTeam     = rankedTeams.find(t => (t.wins > 0) || t.rank) || (teams.length > 0 ? rankedTeams[0] : null)
   const topPasser   = players.find(p => p.pos === 'QB')
   const topRusher   = players.find(p => p.pos === 'RB')
   const topReceiver = players.find(p => p.pos === 'WR')
 
   const statCards = [
-    { label: 'Current Week', value: `Wk ${weeks || '—'}`, icon: '📅' },
+    { label: 'Current Week', value: `Wk ${currentWeek}`, icon: '📅' },
     { label: '#1 Ranked',    value: topTeam?.name || '—', icon: '🏆' },
     { label: 'Teams',        value: teams.length || '—',  icon: '🏟️' },
     { label: 'Games Played', value: finalGames.length,    icon: '🏈' },
@@ -190,13 +196,17 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries 
               No dynasties have emerged yet. Sync your first screenshot to start the chronicle.
             </div>
           )}
-          {teams.slice(0, 5).map((t, i) => (
+          {rankedTeams.slice(0, 5).map((t, i) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < 4 ? `1px solid ${C.border}` : 'none' }}>
-              <span style={{
-                fontFamily: "'Oswald', sans-serif", fontSize: 20,
-                color: i === 0 ? C.accent : C.muted,
-                width: 28, textAlign: 'center', flexShrink: 0,
-              }}>{i + 1}</span>
+              <div style={{ width: 32, textAlign: 'center', flexShrink: 0 }}>
+                <span style={{
+                  fontFamily: "'Oswald', sans-serif", fontSize: 20,
+                  color: i === 0 ? C.accent : C.muted,
+                }}>
+                  {t.rank ?? (i + 1)}
+                </span>
+                {t.rank && <div style={{ fontSize: 8, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 1 }}>poll</div>}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: C.text, fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
                 <div style={{ color: C.muted, fontSize: 12 }}>{t.coach || '—'}</div>
@@ -590,10 +600,9 @@ function getPhase(w) {
   return SEASON_PHASES.find(p => w >= p.range[0] && w <= p.range[1]) || { label: `WEEK ${w}`, sub: '' }
 }
 
-function Season({ games, teams, isMobile }) {
+function Season({ games, teams, isMobile, settings }) {
   const humanNames = new Set(teams.map(t => (t.name || t.team_name || '').toLowerCase()))
-  const finalGames = games.filter(g => g.is_final || g.status === 'Final')
-  const currentWeek = finalGames.length ? Math.max(...finalGames.map(g => g.week).filter(w => w != null)) : 0
+  const currentWeek = settings?.current_week ?? 0
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
   const [sharingGame, setSharingGame] = useState(null)
   useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
@@ -1011,8 +1020,128 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   )
 }
 
+// ── Week Controls (commissioner-only) ─────────────────────────
+function WeekControls({ settings, commPin, onSettingsUpdate, isMobile }) {
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg]       = useState(null)
+  const week = settings?.current_week ?? 0
+
+  const setWeek = async (newWeek) => {
+    if (newWeek < 0 || newWeek > 18) return
+    setSaving(true); setMsg(null)
+    try {
+      const res = await fetch('/api/league-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: commPin, current_week: newWeek }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        onSettingsUpdate(data)
+        setMsg({ ok: true, text: `Week set to ${newWeek}` })
+      } else {
+        setMsg({ ok: false, text: data.error || 'Failed to save' })
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    }
+    setSaving(false)
+    setTimeout(() => setMsg(null), 2500)
+  }
+
+  const PHASE_LABEL = (w) => {
+    if (w === 0) return 'Kickoff Weekend'
+    if (w <= 4)  return 'Early Season'
+    if (w <= 9)  return 'Conference Play'
+    if (w <= 13) return 'Late Season'
+    if (w === 14) return 'Conf. Championships'
+    if (w === 15) return 'CFP First Round'
+    if (w === 16) return 'CFP Quarterfinals'
+    if (w === 17) return 'CFP Semifinals'
+    return 'National Championship'
+  }
+
+  return (
+    <Card style={{ marginBottom: 16, borderColor: C.purple + '44' }}>
+      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.purple, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+        📅 Season Week Controls
+      </div>
+      <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>
+        Set the official current week. The dashboard, AI articles, and narrative engine all use this as their anchor.
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        {/* Decrement */}
+        <button
+          onClick={() => setWeek(week - 1)}
+          disabled={saving || week <= 0}
+          style={{
+            background: C.surface, color: week <= 0 ? C.subtle : C.text,
+            border: `1px solid ${C.border}`, borderRadius: 8,
+            width: 44, height: 44, fontSize: 22, cursor: week <= 0 ? 'not-allowed' : 'pointer',
+            fontFamily: "'Oswald', sans-serif", flexShrink: 0,
+          }}
+        >−</button>
+
+        {/* Week display */}
+        <div style={{ textAlign: 'center', minWidth: 120 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif",
+            fontSize: 42, fontWeight: 700,
+            color: C.accent, lineHeight: 1,
+          }}>
+            {saving ? '…' : `Wk ${week}`}
+          </div>
+          <div style={{ color: C.muted, fontSize: 11, marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+            {PHASE_LABEL(week)}
+          </div>
+        </div>
+
+        {/* Increment */}
+        <button
+          onClick={() => setWeek(week + 1)}
+          disabled={saving || week >= 18}
+          style={{
+            background: week >= 18 ? C.surface : C.accent,
+            color: week >= 18 ? C.subtle : '#000',
+            border: `1px solid ${week >= 18 ? C.border : C.accent}`,
+            borderRadius: 8, width: 44, height: 44, fontSize: 22,
+            cursor: week >= 18 ? 'not-allowed' : 'pointer',
+            fontFamily: "'Oswald', sans-serif", flexShrink: 0,
+          }}
+        >+</button>
+
+        {/* Quick-set buttons */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+          {[0,1,5,10,14].map(w => (
+            <button
+              key={w}
+              onClick={() => setWeek(w)}
+              disabled={saving}
+              style={{
+                background: week === w ? C.purple + '33' : C.surface,
+                color: week === w ? C.purple : C.muted,
+                border: `1px solid ${week === w ? C.purple + '66' : C.border}`,
+                borderRadius: 6, padding: '6px 12px',
+                cursor: 'pointer',
+                fontFamily: "'Oswald', sans-serif", fontSize: 12,
+              }}
+            >Wk {w}</button>
+          ))}
+        </div>
+      </div>
+
+      {msg && (
+        <div style={{ marginTop: 12, color: msg.ok ? C.green : C.red, fontSize: 12 }}>
+          {msg.ok ? '✅' : '❌'} {msg.text}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ── Drive Sync ─────────────────────────────────────────────────
-function DriveSync({ onRefresh, existingScanLog, isMobile }) {
+function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, onSettingsUpdate }) {
   const [files, setFiles]       = useState([])
   const [loading, setLoading]   = useState(false)
   const [parsing, setParsing]   = useState(null)
@@ -1120,6 +1249,23 @@ function DriveSync({ onRefresh, existingScanLog, isMobile }) {
   return (
     <div>
       <SectionTitle isMobile={isMobile} sub="Pull screenshots and Google Docs from your shared Drive folder">Drive Sync</SectionTitle>
+
+      {/* Week Controls — commissioner only */}
+      {commPin && (
+        <WeekControls
+          settings={settings}
+          commPin={commPin}
+          onSettingsUpdate={onSettingsUpdate}
+          isMobile={isMobile}
+        />
+      )}
+      {!commPin && (
+        <Card style={{ marginBottom: 16, borderColor: C.purple + '22' }}>
+          <div style={{ color: C.subtle, fontSize: 13, fontStyle: 'italic' }}>
+            🔐 Log in as commissioner (Media tab) to access week controls and season settings.
+          </div>
+        </Card>
+      )}
 
       {/* Auto-Scan All */}
       <Card style={{ marginBottom: 16, borderColor: C.accent + '33' }}>
@@ -1278,7 +1424,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile }) {
 export default function App() {
   const isMobile = useMobile()
   const [tab, setTab]         = useState('Dashboard')
-  const [data, setData]       = useState({ teams: [], games: [], players: [], scanLog: [] })
+  const [data, setData]       = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 } })
   const [loadingData, setLoadingData] = useState(true)
   const [commPin, setCommPin] = useState(null)
   const [narrativeEntries, setNarrativeEntries] = useState([])
@@ -1385,9 +1531,9 @@ export default function App() {
           )
           : (
             <>
-              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} />}
-              {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} />}
+              {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}
               {tab === 'Media'     && (
                 <MediaCenter
@@ -1404,6 +1550,9 @@ export default function App() {
                   onRefresh={fetchData}
                   existingScanLog={data.scanLog}
                   isMobile={isMobile}
+                  settings={data.settings}
+                  commPin={commPin}
+                  onSettingsUpdate={updated => setData(d => ({ ...d, settings: updated }))}
                 />
               )}
             </>

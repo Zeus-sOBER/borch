@@ -101,13 +101,14 @@ export default async function handler(req, res) {
       .map(c => `${c.name} (${c.team})`)
       .join(', ') || 'No coaches loaded yet';
 
-    // Pull current season info for context
-    const { data: recentGames } = await supabase
-      .from('games')
-      .select('week')
-      .order('week', { ascending: false })
-      .limit(1);
-    const latestWeek = recentGames?.[0]?.week ?? 0;
+    // Pull current week from league settings (commissioner-set, authoritative)
+    const { data: leagueSettings } = await supabase
+      .from('league_settings')
+      .select('current_week, current_season')
+      .eq('id', 1)
+      .single();
+    const currentWeek  = leagueSettings?.current_week  ?? 0;
+    const currentSeason = leagueSettings?.current_season ?? 1;
 
     const isGoogleDoc   = inputMimeType === 'application/vnd.google-apps.document'  || fileName?.toLowerCase().endsWith('.gdoc');
     const isGoogleSheet = inputMimeType === 'application/vnd.google-apps.spreadsheet' || fileName?.toLowerCase().endsWith('.gsheet');
@@ -131,11 +132,11 @@ export default async function handler(req, res) {
     } else if (isGoogleDoc) {
       // ── GOOGLE DOC (general) → scores, notes, stats, etc. ────────────────
       const docText = await fetchGoogleDocText(fileId);
-      parsedResult = await parseGoogleDoc(docText, coaches, humanTeams, latestWeek);
+      parsedResult = await parseGoogleDoc(docText, coaches, humanTeams, currentWeek);
     } else {
       // ── IMAGE PATH ────────────────────────────────────────────────────────
       const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
-      parsedResult = await parseImage(base64, mimeType, coaches, humanTeams, latestWeek);
+      parsedResult = await parseImage(base64, mimeType, coaches, humanTeams, currentWeek);
     }
 
     // Save results to Supabase
@@ -150,6 +151,7 @@ export default async function handler(req, res) {
       (saveResult?.players   || 0) +
       (saveResult?.standings || 0) +
       (saveResult?.recruiting|| 0) +
+      (saveResult?.rankings  || 0) +
       (saveResult?.championship ? 1 : 0);
 
     await supabase.from('scan_log').insert({
@@ -381,10 +383,12 @@ ${CFB_SCHEDULE_CONTEXT}
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
-CURRENT LATEST WEEK IN DATABASE: ${latestWeek}
+CURRENT OFFICIAL WEEK (commissioner-set): ${currentWeek}
+IMPORTANT: Only process/save data that belongs to week ${currentWeek} or earlier. Do not generate rankings, standings, or narrative for future weeks.
 
 STEP 1 — CLASSIFY: Determine exactly what type of screenshot this is:
 - "standings" — shows team win/loss records, conference standings
+- "rankings" — shows AP Poll, CFP Rankings, or any numbered team poll (e.g. "#1 Alabama, #2 Ohio State")
 - "scores" — shows game results, scoreboards, final scores
 - "stats" — shows player statistics, leaders, stat overlays
 - "championship" — shows a trophy, champion screen, title game result, bowl game winner, conference champion
@@ -413,11 +417,19 @@ Return ONLY a JSON object (no markdown, no explanation):
     { "team_name": "", "wins": 0, "losses": 0, "conference_wins": 0, "conference_losses": 0 }
   ],
   "championship": null,
+  "rankings": [
+    { "rank": 1, "team_name": "Alabama", "record": "5-0" }
+  ],
   "recruiting": [
     { "player_name": "", "position": "", "stars": 0, "school": "", "event_type": "commitment|decommitment|offer|visit" }
   ],
   "playoff_bracket": null
 }
+
+RANKINGS INSTRUCTIONS (type = "rankings"):
+- Extract every ranked team visible: rank number, team name, and record if shown
+- Use the "rankings" array above
+- Leave "games", "standings", "players" empty for a pure rankings screenshot
 
 For "championship": { "team_name": "", "coach_name": "", "record": "", "season": 0, "championship_type": "national|conference|bowl" }
 For "playoff_bracket": { "teams": [], "round": "" }
@@ -517,7 +529,7 @@ async function recomputeStandingsFromGames() {
 
 // ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
 async function saveToSupabase(data, coaches, humanTeams) {
-  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0 };
+  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0 };
 
   // Helper: find coach name for a team
   const findCoach = (teamName) => {
@@ -643,6 +655,21 @@ async function saveToSupabase(data, coaches, humanTeams) {
       notes: champ.championship_type ?? null
     }, { onConflict: 'season,team_name' });
     if (!error) saved.championship = true;
+  }
+
+  // Save poll rankings → update rank column on teams
+  if (data.rankings?.length > 0) {
+    for (const entry of data.rankings) {
+      if (!entry.team_name || entry.rank == null) continue;
+      const season = data.season ?? 1;
+      // Upsert team row with rank — create if not exists
+      const { error } = await supabase.from('teams').upsert({
+        name:   entry.team_name,
+        season: season,
+        rank:   entry.rank,
+      }, { onConflict: 'name,season' });
+      if (!error) saved.rankings++;
+    }
   }
 
   // Save recruiting events
