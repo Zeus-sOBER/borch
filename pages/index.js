@@ -1021,9 +1021,34 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
 }
 
 // ── Week Controls (commissioner-only) ─────────────────────────
-function WeekControls({ settings, commPin, onSettingsUpdate, isMobile }) {
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg]       = useState(null)
+function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh }) {
+  const [saving, setSaving]           = useState(false)
+  const [msg, setMsg]                 = useState(null)
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcMsg, setRecalcMsg]     = useState(null)
+
+  const recalcStandings = async () => {
+    setRecalculating(true)
+    setRecalcMsg(null)
+    try {
+      const res  = await fetch('/api/recalculate-standings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: commPin }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRecalcMsg({ ok: true, text: data.message })
+        if (onRefresh) onRefresh()
+      } else {
+        setRecalcMsg({ ok: false, text: data.error || 'Failed to recalculate' })
+      }
+    } catch (e) {
+      setRecalcMsg({ ok: false, text: e.message })
+    }
+    setRecalculating(false)
+    setTimeout(() => setRecalcMsg(null), 4000)
+  }
   const week = settings?.current_week ?? 0
 
   const setWeek = async (newWeek) => {
@@ -1136,6 +1161,36 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile }) {
           {msg.ok ? '✅' : '❌'} {msg.text}
         </div>
       )}
+
+      {/* ── Recalculate Standings ── */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+          🔧 Fix Standings
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
+          If standings look wrong (wrong win count, missing teams, etc.), this recalculates everything from scratch using actual game results.
+        </div>
+        <button
+          onClick={recalcStandings}
+          disabled={recalculating}
+          style={{
+            background: recalculating ? C.subtle : C.surface,
+            color: recalculating ? C.muted : C.text,
+            border: `1px solid ${recalculating ? C.border : C.accent + '88'}`,
+            borderRadius: 6, padding: '10px 20px',
+            cursor: recalculating ? 'not-allowed' : 'pointer',
+            fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
+            minHeight: 42,
+          }}
+        >
+          {recalculating ? '⏳ Recalculating...' : '🔄 Recalculate Standings'}
+        </button>
+        {recalcMsg && (
+          <div style={{ marginTop: 8, color: recalcMsg.ok ? C.green : C.red, fontSize: 12 }}>
+            {recalcMsg.ok ? '✅' : '❌'} {recalcMsg.text}
+          </div>
+        )}
+      </div>
     </Card>
   )
 }
@@ -1257,6 +1312,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
           commPin={commPin}
           onSettingsUpdate={onSettingsUpdate}
           isMobile={isMobile}
+          onRefresh={onRefresh}
         />
       )}
       {!commPin && (
