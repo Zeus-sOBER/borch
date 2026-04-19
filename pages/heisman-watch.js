@@ -47,7 +47,21 @@ export default function HeismanWatch() {
     try {
       setLoading(true)
       const res = await fetch('/api/heisman-watch')
-      const data = await res.json()
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('API Error:', res.status, text)
+        setError(`API Error: ${res.status} - ${text.substring(0, 100)}`)
+        return
+      }
+
+      const text = await res.text()
+      if (!text) {
+        setError('Empty response from API')
+        return
+      }
+
+      const data = JSON.parse(text)
       if (data.success) {
         setCandidates(data.candidates || [])
         setError(null)
@@ -55,8 +69,8 @@ export default function HeismanWatch() {
         setError(data.error || 'Failed to load candidates')
       }
     } catch (err) {
-      setError(err.message)
       console.error('Error fetching candidates:', err)
+      setError(`Error: ${err.message}. Check browser console for details.`)
     } finally {
       setLoading(false)
     }
@@ -77,7 +91,16 @@ export default function HeismanWatch() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const data = await res.json()
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('API Error:', res.status, text)
+        setError(`API Error: ${res.status}`)
+        return
+      }
+
+      const text = await res.text()
+      const data = JSON.parse(text)
 
       if (data.success) {
         setCandidates([...candidates, data.candidate].sort((a, b) => a.rank - b.rank))
@@ -85,10 +108,11 @@ export default function HeismanWatch() {
         setShowForm(false)
         setError(null)
       } else {
-        setError(data.error)
+        setError(data.error || 'Failed to add candidate')
       }
     } catch (err) {
-      setError(err.message)
+      console.error('Error adding candidate:', err)
+      setError(`Error: ${err.message}`)
     }
   }
 
