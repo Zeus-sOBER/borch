@@ -20,19 +20,23 @@ A live website for EA Sports CFB 26 Online Dynasty leagues. Team standings, scor
 ```
 borch/
 ├── pages/
-│   ├── index.js                 ← Main hub (Dashboard, Standings, Scores, Stats, Media, Drive Sync)
-│   ├── stream-watcher.js        ← Stream watching & dynasty lore generation
-│   ├── coaches.js               ← Coach profiles & management
-│   └── api/                     ← API endpoints for all features
+│   ├── index.js                      ← Main hub (Dashboard, Standings, Scores, Stats, Media, Drive Sync)
+│   ├── stream-watcher.js             ← Stream watching & dynasty lore generation
+│   ├── coaches.js                    ← Coach profiles & management
+│   ├── heisman-watch.js              ← Heisman Trophy top 5 candidates showcase
+│   └── api/                          ← API endpoints for all features
+│       └── heisman-watch.js          ← Heisman Watch CRUD endpoints
 ├── lib/
-│   ├── supabase.js              ← Database client
-│   └── drive.js                 ← Google Drive integration
-├── supabase-schema.sql          ← Core database tables
-├── supabase-schema-stream.sql   ← Stream event tracking
-├── supabase-schema-coaches.sql  ← Coach data
+│   ├── supabase.js                   ← Database client
+│   └── drive.js                      ← Google Drive integration
+├── supabase-schema.sql               ← Core database tables
+├── supabase-schema-stream.sql        ← Stream event tracking
+├── supabase-schema-coaches.sql       ← Coach data
+├── supabase-schema-heisman.sql       ← Heisman Trophy candidates table
+├── HEISMAN_WATCH.md                  ← Complete Heisman Watch guide (see this for setup)
 ├── package.json
 ├── next.config.js
-└── .env.local.example           ← Environment variables template
+└── .env.local.example                ← Environment variables template
 ```
 
 ---
@@ -70,6 +74,13 @@ borch/
 - Achievement/trophy tracking (championships, bowl wins, recruiting crowns)
 - Commissioner-protected add/edit/delete
 - Automatic W/L calculation from season records
+
+### Heisman Trophy Watch
+- Track top 5 Heisman Trophy candidates instead of all player stats
+- Import in-game Heisman trophy screenshots from Google Drive
+- Display player stats, rankings, and contextual notes
+- Streamlined add/remove candidate management
+- Responsive design with trophy screenshot display
 
 ---
 
