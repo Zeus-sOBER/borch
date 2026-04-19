@@ -20,6 +20,7 @@ export default function HeismanWatch() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [formData, setFormData] = useState({
     player_name: '',
     position: '',
@@ -34,6 +35,13 @@ export default function HeismanWatch() {
   useEffect(() => {
     fetchCandidates()
   }, [])
+
+  // Set first candidate as selected by default
+  useEffect(() => {
+    if (candidates.length > 0 && !selectedCandidate) {
+      setSelectedCandidate(candidates[0])
+    }
+  }, [candidates])
 
   const fetchCandidates = async () => {
     try {
@@ -91,6 +99,9 @@ export default function HeismanWatch() {
       const data = await res.json()
       if (data.success) {
         setCandidates(candidates.filter(c => c.id !== id))
+        if (selectedCandidate?.id === id) {
+          setSelectedCandidate(candidates[0] || null)
+        }
         setError(null)
       } else {
         setError(data.error)
@@ -107,16 +118,16 @@ export default function HeismanWatch() {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: '24px' }}>
-      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1600, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, margin: 0, marginBottom: 8 }}>🏆 HEISMAN WATCH</h1>
-          <p style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0 }}>Top 5 candidates competing for college football's most prestigious award</p>
+          <h1 style={{ fontSize: 32, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, margin: 0, marginBottom: 8 }}>🏆 HEISMAN TROPHY WATCH</h1>
+          <p style={{ fontSize: 12, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0 }}>Top 5 candidates competing for college football's most prestigious award</p>
         </div>
 
         {/* Error */}
         {error && (
-          <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, color: C.red, padding: 16, borderRadius: 6, marginBottom: 24, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 0.5 }}>
+          <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, color: C.red, padding: 12, borderRadius: 4, marginBottom: 24, fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 0.5 }}>
             {error}
           </div>
         )}
@@ -129,11 +140,11 @@ export default function HeismanWatch() {
               background: showForm ? C.red : C.accent,
               color: C.bg,
               border: 'none',
-              padding: '10px 20px',
-              borderRadius: 6,
+              padding: '8px 16px',
+              borderRadius: 4,
               cursor: 'pointer',
               fontFamily: "'Oswald', sans-serif",
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
               letterSpacing: 1,
             }}
@@ -144,158 +155,166 @@ export default function HeismanWatch() {
 
         {/* Add Form */}
         {showForm && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 24, borderRadius: 6, marginBottom: 32 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>ADD NEW CANDIDATE</h2>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 20, borderRadius: 4, marginBottom: 32 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>ADD CANDIDATE</h2>
             <form onSubmit={handleAddCandidate}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <input
-                  type="text"
-                  placeholder="Player Name"
-                  required
-                  value={formData.player_name}
-                  onChange={(e) => setFormData({ ...formData, player_name: e.target.value })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                />
-                <input
-                  type="text"
-                  placeholder="Position (QB, RB, WR, etc.)"
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                />
+                <input type="text" placeholder="Player Name" required value={formData.player_name} onChange={(e) => setFormData({ ...formData, player_name: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
+                <input type="text" placeholder="Position (QB, RB, WR)" value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <input
-                  type="number"
-                  placeholder="Team ID"
-                  required
-                  value={formData.team_id}
-                  onChange={(e) => setFormData({ ...formData, team_id: e.target.value })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                />
-                <input
-                  type="number"
-                  placeholder="Coach ID"
-                  required
-                  value={formData.coach_id}
-                  onChange={(e) => setFormData({ ...formData, coach_id: e.target.value })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                />
+                <input type="number" placeholder="Team ID" required value={formData.team_id} onChange={(e) => setFormData({ ...formData, team_id: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
+                <input type="number" placeholder="Coach ID" required value={formData.coach_id} onChange={(e) => setFormData({ ...formData, coach_id: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <select
-                  value={formData.rank}
-                  onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                >
-                  <option value="1">Rank 1 (Top Contender)</option>
+                <select value={formData.rank} onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                  <option value="1">Rank 1</option>
                   <option value="2">Rank 2</option>
                   <option value="3">Rank 3</option>
                   <option value="4">Rank 4</option>
                   <option value="5">Rank 5</option>
                 </select>
-                <input
-                  type="url"
-                  placeholder="Trophy Screenshot URL (Google Drive)"
-                  value={formData.trophy_screenshot_url}
-                  onChange={(e) => setFormData({ ...formData, trophy_screenshot_url: e.target.value })}
-                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
-                />
+                <input type="url" placeholder="Trophy Screenshot URL" value={formData.trophy_screenshot_url} onChange={(e) => setFormData({ ...formData, trophy_screenshot_url: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
               </div>
-
-              <textarea
-                placeholder="Notes/Commentary"
-                rows="3"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12, marginBottom: 12, boxSizing: 'border-box' }}
-              />
-
-              <button
-                type="submit"
-                style={{
-                  background: C.green,
-                  color: C.bg,
-                  border: 'none',
-                  padding: '10px 20px',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontFamily: "'Oswald', sans-serif",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  width: '100%',
-                }}
-              >
-                ✓ ADD CANDIDATE
-              </button>
+              <textarea placeholder="Notes" rows="2" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12, marginBottom: 12, boxSizing: 'border-box' }} />
+              <button type="submit" style={{ background: C.green, color: C.bg, border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>✓ ADD</button>
             </form>
           </div>
         )}
 
-        {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: 'center', padding: 48, color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}>
-            ⏳ LOADING...
-          </div>
-        )}
+        {/* Main Content */}
+        {!loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
+            {/* Left: Table */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+              {/* Header Bar */}
+              <div style={{ background: C.accent, color: C.bg, padding: '12px 16px', fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: 2 }}>
+                🏆 HEISMAN TROPHY
+              </div>
 
-        {/* Candidates */}
-        {!loading && candidates.length > 0 && (
-          <div style={{ display: 'grid', gap: 20 }}>
-            {candidates.map((c) => (
-              <div
-                key={c.id}
-                style={{
-                  background: C.card,
-                  border: `1px solid ${C.border}`,
-                  borderLeft: `4px solid ${C.accent}`,
-                  padding: 20,
-                  borderRadius: 6,
-                }}
-              >
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 32 }}>{getMedal(c.rank)}</span>
-                    <div>
-                      <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0, marginBottom: 4 }}>
-                        {c.player_name} {c.position && `(${c.position})`}
-                      </h3>
-                      <p style={{ fontSize: 13, color: C.accent, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
-                        {c.teams?.name || 'TEAM UNKNOWN'}
-                      </p>
-                      <p style={{ fontSize: 11, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0 }}>
-                        Coach: {c.coaches?.name || 'Unknown'}
-                      </p>
+              {/* Column Headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '40px 80px 1fr 100px 60px', background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '8px 16px', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', fontWeight: 700, gap: 12 }}>
+                <div>RANK</div>
+                <div>POS</div>
+                <div>NAME / TEAM / COACH</div>
+                <div>STAT</div>
+                <div>TREND</div>
+              </div>
+
+              {/* Rows */}
+              {candidates.length > 0 ? (
+                <div>
+                  {candidates.map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => setSelectedCandidate(c)}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '40px 80px 1fr 100px 60px',
+                        gap: 12,
+                        padding: '12px 16px',
+                        borderBottom: `1px solid ${C.border}`,
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        background: selectedCandidate?.id === c.id ? C.subtle : 'transparent',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = C.subtle}
+                      onMouseLeave={(e) => e.currentTarget.style.background = selectedCandidate?.id === c.id ? C.subtle : 'transparent'}
+                    >
+                      {/* Rank */}
+                      <div style={{ fontSize: 20, fontWeight: 700, color: C.accent }}>
+                        {getMedal(c.rank)}
+                      </div>
+
+                      {/* Position */}
+                      <div style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
+                        {c.position || '—'}
+                      </div>
+
+                      {/* Name / Team / Coach */}
+                      <div>
+                        <p style={{ fontSize: 13, fontFamily: "'Oswald', sans-serif", color: C.text, fontWeight: 700, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
+                          {c.player_name}
+                        </p>
+                        <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.accent, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
+                          {c.teams?.name || 'TEAM UNKNOWN'}
+                        </p>
+                        <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
+                          Coach: {c.coaches?.name || 'Unknown'}
+                        </p>
+                      </div>
+
+                      {/* Key Stat */}
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontSize: 14, fontFamily: "'Oswald', sans-serif", color: C.blue, fontWeight: 700, margin: 0 }}>
+                          {c.key_stats?.passing_yards || c.key_stats?.rushing_yards || '—'}
+                        </p>
+                        <p style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
+                          {c.key_stats?.passing_yards ? 'PASS YDS' : c.key_stats?.rushing_yards ? 'RUSH YDS' : ''}
+                        </p>
+                      </div>
+
+                      {/* Delete Button */}
+                      <div style={{ textAlign: 'right' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(c.id)
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: C.red,
+                            cursor: 'pointer',
+                            fontSize: 14,
+                            padding: 0,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(c.id)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: C.red,
-                      cursor: 'pointer',
-                      fontSize: 20,
-                      padding: 0,
-                    }}
-                  >
-                    ✕
-                  </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1 }}>
+                  NO CANDIDATES YET
+                </div>
+              )}
+            </div>
+
+            {/* Right: Detail Card */}
+            {selectedCandidate && (
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Player Name */}
+                <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
+                  <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: 0, marginBottom: 4, textTransform: 'uppercase' }}>
+                    {selectedCandidate.rank === 1 ? '🏆 TOP CONTENDER' : `RANK #${selectedCandidate.rank}`}
+                  </p>
+                  <h3 style={{ fontSize: 18, fontFamily: "'Oswald', sans-serif", color: C.text, fontWeight: 700, letterSpacing: 1, margin: 0, marginBottom: 4 }}>
+                    {selectedCandidate.player_name}
+                  </h3>
+                  <p style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", color: C.accent, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
+                    {selectedCandidate.teams?.name}
+                  </p>
+                  <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
+                    Coach: {selectedCandidate.coaches?.name}
+                  </p>
                 </div>
 
-                {/* Stats */}
-                {c.key_stats && Object.keys(c.key_stats).length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 16, padding: 12, background: C.surface, borderRadius: 4 }}>
-                    {Object.entries(c.key_stats).map(([stat, value]) => (
-                      <div key={stat}>
-                        <p style={{ fontSize: 10, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0, marginBottom: 4, textTransform: 'uppercase' }}>
+                {/* Key Stats */}
+                {selectedCandidate.key_stats && Object.keys(selectedCandidate.key_stats).length > 0 && (
+                  <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
+                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+                      KEY STATS
+                    </p>
+                    {Object.entries(selectedCandidate.key_stats).slice(0, 4).map(([stat, value]) => (
+                      <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0, textTransform: 'uppercase' }}>
                           {stat}
                         </p>
-                        <p style={{ fontSize: 16, fontWeight: 700, color: C.blue, fontFamily: "'Oswald', sans-serif", margin: 0 }}>
+                        <p style={{ fontSize: 12, fontFamily: "'Oswald', sans-serif", color: C.blue, fontWeight: 700, margin: 0 }}>
                           {value}
                         </p>
                       </div>
@@ -304,47 +323,40 @@ export default function HeismanWatch() {
                 )}
 
                 {/* Notes */}
-                {c.notes && (
-                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 12, borderRadius: 4, marginBottom: 16 }}>
-                    <p style={{ fontSize: 11, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0, lineHeight: 1.5 }}>
-                      💭 {c.notes}
+                {selectedCandidate.notes && (
+                  <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
+                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+                      NOTES
+                    </p>
+                    <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.text, lineHeight: 1.4, margin: 0 }}>
+                      {selectedCandidate.notes}
                     </p>
                   </div>
                 )}
 
                 {/* Screenshot */}
-                {c.trophy_screenshot_url && (
+                {selectedCandidate.trophy_screenshot_url && (
                   <div>
-                    <p style={{ fontSize: 10, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                      Heisman Trophy Screenshot
+                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+                      TROPHY SCREENSHOT
                     </p>
                     <img
-                      src={c.trophy_screenshot_url}
-                      alt={`${c.player_name} Heisman Trophy`}
-                      style={{
-                        maxHeight: 200,
-                        borderRadius: 4,
-                        border: `1px solid ${C.border}`,
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => window.open(c.trophy_screenshot_url, '_blank')}
+                      src={selectedCandidate.trophy_screenshot_url}
+                      alt={`${selectedCandidate.player_name} Heisman`}
+                      style={{ width: '100%', borderRadius: 4, border: `1px solid ${C.border}`, cursor: 'pointer' }}
+                      onClick={() => window.open(selectedCandidate.trophy_screenshot_url, '_blank')}
                     />
                   </div>
                 )}
               </div>
-            ))}
+            )}
           </div>
         )}
 
-        {/* Empty State */}
-        {!loading && candidates.length === 0 && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 48, borderRadius: 6, textAlign: 'center' }}>
-            <p style={{ fontSize: 20, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>
-              🏆 NO CANDIDATES YET
-            </p>
-            <p style={{ fontSize: 12, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0 }}>
-              Start adding players to the Heisman Trophy Watch
-            </p>
+        {/* Loading */}
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 48, color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}>
+            ⏳ LOADING...
           </div>
         )}
       </div>
