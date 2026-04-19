@@ -153,6 +153,7 @@ export default async function handler(req, res) {
       (saveResult?.standings || 0) +
       (saveResult?.recruiting|| 0) +
       (saveResult?.rankings  || 0) +
+      (saveResult?.heisman   || 0) +
       (saveResult?.championship ? 1 : 0);
 
     await supabase.from('scan_log').insert({
@@ -407,6 +408,7 @@ STEP 1 — CLASSIFY: Determine exactly what type of screenshot this is:
 - "championship" — shows a trophy, champion screen, title game result, bowl game winner, conference champion
 - "recruiting" — shows recruiting board, commitments, offers
 - "playoff_bracket" — shows CFP bracket or bowl game matchups
+- "heisman_watch" — shows the Heisman Trophy Watch screen listing top 5 candidates with POS, NAME, TEAM, YEAR, CHANGE columns
 - "unknown" — cannot determine or menu/loading screen
 
 IMPORTANT: If the typeHint is "ap_poll", classify this as "ap_poll" regardless of what you see.
@@ -439,8 +441,16 @@ Return ONLY a JSON object (no markdown, no explanation):
   "recruiting": [
     { "player_name": "", "position": "", "stars": 0, "school": "", "event_type": "commitment|decommitment|offer|visit" }
   ],
-  "playoff_bracket": null
+  "playoff_bracket": null,
+  "heisman_candidates": [
+    { "rank": 1, "player_name": "", "position": "", "team_name": "", "class_year": "", "trend": "up|down|same" }
+  ]
 }
+
+HEISMAN WATCH INSTRUCTIONS (type = "heisman_watch"):
+- Extract every candidate visible: rank (1=best), player_name, position, team_name, class_year (JR, SR, JR (RS), SR (RS), etc.), trend (up/down/same from the CHANGE arrow color)
+- Leave games, standings, players, rankings all empty
+- "trend" = "up" if arrow is green/pointing up, "down" if red/pointing down, "same" otherwise
 
 RANKINGS INSTRUCTIONS (type = "rankings" or "ap_poll"):
 - Extract every ranked team visible: rank number, team name, record if shown, and poll points if shown
@@ -546,7 +556,7 @@ async function recomputeStandingsFromGames() {
 
 // ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
 async function saveToSupabase(data, coaches, humanTeams) {
-  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0 };
+  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0, heisman: 0 };
 
   // Helper: find coach name for a team
   const findCoach = (teamName) => {
@@ -726,6 +736,29 @@ async function saveToSupabase(data, coaches, humanTeams) {
         event_type: event.event_type ?? 'unknown'
       });
       if (!error) saved.recruiting++;
+    }
+  }
+
+  // Save Heisman Watch candidates
+  if (data.type === 'heisman_watch' && data.heisman_candidates?.length > 0) {
+    // Replace all candidates for this season
+    const season = data.season ?? 1;
+    await supabase.from('heisman_watch').delete().eq('season', season);
+
+    for (const c of data.heisman_candidates) {
+      if (!c.player_name || !c.team_name || !c.rank) continue;
+      const { error } = await supabase.from('heisman_watch').insert({
+        rank:         c.rank,
+        player_name:  c.player_name,
+        position:     c.position    || null,
+        team_name:    c.team_name,
+        class_year:   c.class_year  || null,
+        trend:        c.trend       || 'same',
+        key_stats:    {},
+        season,
+        week_updated: data.week ?? null,
+      });
+      if (!error) saved.heisman++;
     }
   }
 

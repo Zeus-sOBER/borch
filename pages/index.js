@@ -325,7 +325,7 @@ const ARTICLE_TYPE_LABELS = {
   'league-preview':    { label: 'League Preview',    icon: '📅' },
 }
 
-function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen }) {
+function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen, heismanCandidates = [] }) {
   const finalGames  = games.filter(gameIsFinal)
   const currentWeek = settings?.current_week ?? 0
 
@@ -792,6 +792,90 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
             }
           </div>
         </div>
+      </div>
+
+      {/* ── HEISMAN WATCH WIDGET ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <SectionLabel color={C.accent}>Heisman Watch</SectionLabel>
+          <a href="/heisman-watch" style={{ fontSize: 11, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', textTransform: 'uppercase' }}>
+            Full View →
+          </a>
+        </div>
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Gold header bar */}
+          <div style={{ background: C.accent, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🏆</span>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700, color: C.bg, letterSpacing: 2 }}>HEISMAN TROPHY</span>
+          </div>
+          {heismanCandidates.length === 0 ? (
+            <div style={{ padding: '20px 16px', color: C.muted, fontSize: 12, textAlign: 'center', fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>
+              No candidates yet — sync a Heisman Watch screenshot from the Sync tab
+            </div>
+          ) : (
+            <div>
+              {/* Column headers — RK | POS | NAME/TEAM | YEAR | CHANGE */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '36px 56px 1fr 90px 60px',
+                padding: '7px 16px', gap: 12,
+                background: C.surface, borderBottom: `1px solid ${C.border}`,
+                fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 1, fontWeight: 700,
+              }}>
+                <div>RK</div>
+                <div>POS</div>
+                <div>NAME / TEAM</div>
+                <div style={{ textAlign: 'center' }}>YEAR</div>
+                <div style={{ textAlign: 'center' }}>CHANGE</div>
+              </div>
+              {heismanCandidates.map((c, i) => (
+                <div key={c.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '36px 56px 1fr 90px 60px',
+                  gap: 12, padding: '10px 16px',
+                  borderBottom: i < heismanCandidates.length - 1 ? `1px solid ${C.border}` : 'none',
+                  alignItems: 'center',
+                  background: i === 0 ? C.accent + '09' : 'transparent',
+                }}>
+                  {/* Rank badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 22,
+                      background: i === 0 ? C.accent : C.subtle,
+                      color: i === 0 ? C.bg : C.muted,
+                      borderRadius: 3,
+                      fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700,
+                    }}>{c.rank}</span>
+                  </div>
+                  {/* Position */}
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
+                    {c.position || '—'}
+                  </div>
+                  {/* Name / Team */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.text, fontWeight: 700, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.player_name}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.accent, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.team_name}
+                    </div>
+                  </div>
+                  {/* Class year */}
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.text, textAlign: 'center' }}>
+                    {c.class_year || '—'}
+                  </div>
+                  {/* Trend arrow */}
+                  <div style={{ textAlign: 'center', fontSize: 14 }}>
+                    {c.trend === 'up'   && <span style={{ color: C.green }}>▲</span>}
+                    {c.trend === 'down' && <span style={{ color: C.red }}>▼</span>}
+                    {(!c.trend || c.trend === 'same') && <span style={{ color: C.muted, fontSize: 11 }}>—</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
 
       {/* ── NEXT MATCHUP PREVIEW ── */}
@@ -2026,6 +2110,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
     { id: 'recruiting',  label: '📋 Recruiting',   desc: 'Commitments, visits, offers' },
     { id: 'championship',label: '🏆 Championship', desc: 'Trophy screens, bowl/CFP results' },
     { id: 'ap_poll',     label: '🗳️ AP Top 25',    desc: 'AP Top 25 poll screenshot — updates the Standings AP Poll view. Cannot be manually edited.' },
+    { id: 'heisman_watch', label: '🏆 Heisman Watch', desc: 'Heisman Trophy Watch screen — replaces current candidates with the 5 shown in-game.' },
   ]
 
   // Pre-populate results from existing scan_log on mount
@@ -2107,6 +2192,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
     if (standings)  parts.push(`${standings} team${standings !== 1 ? 's' : ''}`)
     if (players)    parts.push(`${players} player${players !== 1 ? 's' : ''}`)
     if (recruiting) parts.push(`${recruiting} recruit${recruiting !== 1 ? 's' : ''}`)
+    if (result.saved?.heisman) parts.push(`${result.saved.heisman} Heisman candidate${result.saved.heisman !== 1 ? 's' : ''}`)
     if (championship) parts.push('1 championship')
     if (result.preloaded) return result.summary || 'Previously synced'
     return parts.length ? parts.join(', ') + ' saved' : 'data saved'
@@ -2622,7 +2708,7 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
 export default function App() {
   const isMobile = useMobile()
   const [tab, setTab]                   = useState('Dashboard')
-  const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 } })
+  const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 }, heismanCandidates: [] })
   const [loadingData, setLoadingData]   = useState(true)
   const [commPin, setCommPin]           = useState(null)
   const [showCommLogin, setShowCommLogin] = useState(false)
@@ -2784,7 +2870,7 @@ export default function App() {
             {!isMobile && (
               <>
                 <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
-                <a href="/heisman-watch" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>🏆 HEISMAN</a>
+                <button onClick={() => setTab('Dashboard')} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 HEISMAN</button>
                 <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
               </>
             )}
@@ -2851,7 +2937,7 @@ export default function App() {
           )
           : (
             <>
-              {tab === 'Dashboard' && <Dashboard  {...data} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onArticleOpen={setOpenArticle} />}
+              {tab === 'Dashboard' && <Dashboard  {...data} heismanCandidates={data.heismanCandidates || []} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
