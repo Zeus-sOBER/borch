@@ -414,6 +414,9 @@ STEP 1 — CLASSIFY: Determine exactly what type of screenshot this is:
 IMPORTANT: If the typeHint is "ap_poll", classify this as "ap_poll" regardless of what you see.
 An "ap_poll" screenshot shows the Associated Press media poll ranking — it lists teams by rank number with records and poll points.
 
+IMPORTANT: If the typeHint is "heisman_watch", classify this as "heisman_watch" regardless of what you see.
+A "heisman_watch" screenshot shows the in-game Heisman Trophy Watch list with columns: POS, NAME, TEAM, YEAR, CHANGE.
+
 STEP 2 — EXTRACT: Pull all visible data. Be precise with numbers. Only extract what you can clearly read.
 
 STEP 3 — APPLY CFB CONTEXT: Based on the week number visible (if any) and the type of screen, determine what phase of the season this represents.

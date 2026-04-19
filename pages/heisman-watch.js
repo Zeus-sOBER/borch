@@ -164,6 +164,13 @@ export default function HeismanWatch() {
     <div style={{ background: C.bg, minHeight: '100vh', padding: '24px', fontFamily: "'Oswald', sans-serif" }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
+        {/* ── Back link ─────────────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 20 }}>
+          <a href="/" style={{ color: C.muted, fontSize: 12, letterSpacing: 1, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            ← BACK TO DYNASTY UNIVERSE
+          </a>
+        </div>
+
         {/* ── Page Header ───────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: C.text, letterSpacing: 2, margin: 0, marginBottom: 4 }}>

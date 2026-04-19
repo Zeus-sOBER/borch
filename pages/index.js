@@ -19,7 +19,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Stats', 'Media', 'Sync']
+const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Heisman', 'Media', 'Sync']
 
 // ── Game status helper ─────────────────────────────────────────
 // A game is only "final" if it has real scores — not null, not 0-0
@@ -214,7 +214,7 @@ const ALL_NAV_ITEMS = [
   { id: 'Standings', icon: '📊', label: 'Standings' },
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
-  { id: 'Stats',     icon: '⭐', label: 'Stats' },
+  { id: 'Heisman',   icon: '🏆', label: 'Heisman' },
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
@@ -1483,63 +1483,249 @@ function Season({ games, teams, isMobile, settings }) {
   )
 }
 
-// ── Player Stats ───────────────────────────────────────────────
-function PlayerStats({ players, isMobile }) {
-  const positions = ['ALL', ...new Set(players.map(p => p.pos))]
-  const [pos, setPos] = useState('ALL')
-  const filtered = pos === 'ALL' ? players : players.filter(p => p.pos === pos)
-  const STAT_COLS = { QB: ['pass_yds','pass_td','int','rush_yds'], RB: ['rush_yds','rush_td','rec','rec_yds'], WR: ['rec','rec_yds','rec_td','yac'] }
+// ── Heisman Watch Tab ───────────────────────────────────────────
+function HeismanTab({ heismanCandidates: initialCandidates = [], onRefresh, isMobile }) {
+  const BLANK = { player_name: '', position: '', team_name: '', class_year: '', trend: 'same', rank: 1, notes: '' }
+  const [candidates, setCandidates] = useState(initialCandidates)
+  const [selected,   setSelected]   = useState(null)
+  const [showForm,   setShowForm]   = useState(false)
+  const [form,       setForm]       = useState(BLANK)
+  const [error,      setError]      = useState(null)
+  const [saving,     setSaving]     = useState(false)
+
+  // Keep in sync when parent refreshes
+  useEffect(() => {
+    setCandidates(initialCandidates)
+    if (initialCandidates.length > 0 && !selected) setSelected(initialCandidates[0])
+  }, [initialCandidates])
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    setSaving(true); setError(null)
+    try {
+      const res  = await fetch('/api/heisman-watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, rank: parseInt(form.rank) }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        const next = [...candidates, data.candidate].sort((a, b) => a.rank - b.rank)
+        setCandidates(next)
+        setSelected(data.candidate)
+        setForm(BLANK)
+        setShowForm(false)
+        onRefresh?.()
+      } else {
+        setError(data.error || 'Failed to add')
+      }
+    } catch (err) { setError(err.message) }
+    setSaving(false)
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Remove this candidate from the Heisman Watch?')) return
+    try {
+      const res  = await fetch(`/api/heisman-watch?id=${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        const next = candidates.filter(c => c.id !== id)
+        setCandidates(next)
+        setSelected(next[0] || null)
+        onRefresh?.()
+      } else { setError(data.error) }
+    } catch (err) { setError(err.message) }
+  }
+
+  const inp = {
+    background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+    padding: '9px 12px', borderRadius: 6, fontSize: 13, width: '100%', boxSizing: 'border-box',
+  }
 
   return (
     <div>
-      <SectionTitle isMobile={isMobile} sub="Individual Season Statistics">Player Stats</SectionTitle>
-      {players.length === 0
-        ? (
-          <Card>
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>⭐</div>
-              <div style={{ color: C.muted, fontSize: 14, fontStyle: 'italic' }}>
-                No legends have risen yet. Sync a player stats screenshot to begin tracking dynasty greats.
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <SectionTitle isMobile={isMobile} sub="Top 5 candidates for college football's most prestigious award">
+          Heisman Watch
+        </SectionTitle>
+        <button
+          onClick={() => { setShowForm(f => !f); setError(null) }}
+          style={{
+            background: showForm ? C.red + 'dd' : C.accent, color: C.bg,
+            border: 'none', borderRadius: 6, padding: '10px 20px', cursor: 'pointer',
+            fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: 1, flexShrink: 0,
+          }}
+        >
+          {showForm ? '✕ Cancel' : '+ Add Candidate'}
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <Card style={{ marginBottom: 16, borderColor: C.red + '55', background: C.red + '11' }}>
+          <span style={{ color: C.red, fontSize: 13 }}>{error}</span>
+        </Card>
+      )}
+
+      {/* Add form */}
+      {showForm && (
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.accent, letterSpacing: 2, marginBottom: 16 }}>ADD CANDIDATE</div>
+          <form onSubmit={handleAdd}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <input placeholder="Player Name *" required value={form.player_name} onChange={e => setForm({...form, player_name: e.target.value})} style={inp} />
+              <input placeholder="Position (QB, HB, WR…)" value={form.position} onChange={e => setForm({...form, position: e.target.value})} style={inp} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <input placeholder="Team Name *" required value={form.team_name} onChange={e => setForm({...form, team_name: e.target.value})} style={inp} />
+              <input placeholder="Class Year (JR, SR (RS)…)" value={form.class_year} onChange={e => setForm({...form, class_year: e.target.value})} style={inp} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <select value={form.rank} onChange={e => setForm({...form, rank: e.target.value})} style={inp}>
+                {[1,2,3,4,5].map(r => <option key={r} value={r}>Rank #{r}</option>)}
+              </select>
+              <select value={form.trend} onChange={e => setForm({...form, trend: e.target.value})} style={inp}>
+                <option value="up">▲ Trending Up</option>
+                <option value="same">— No Change</option>
+                <option value="down">▼ Trending Down</option>
+              </select>
+            </div>
+            <button type="submit" disabled={saving} style={{ background: C.green, color: '#000', border: 'none', borderRadius: 6, padding: '10px 22px', cursor: saving ? 'wait' : 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
+              {saving ? 'Saving…' : '✓ Add Candidate'}
+            </button>
+          </form>
+        </Card>
+      )}
+
+      {/* Main layout: table + detail panel */}
+      <div style={{ display: 'grid', gridTemplateColumns: !isMobile && selected && candidates.length > 0 ? '1fr 280px' : '1fr', gap: 16, alignItems: 'start' }}>
+
+        {/* Candidates table */}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Gold header */}
+          <div style={{ background: C.accent, padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🏆</span>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 15, fontWeight: 700, color: C.bg, letterSpacing: 2 }}>HEISMAN TROPHY</span>
+          </div>
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '40px 64px 1fr 100px 60px', padding: '8px 18px', gap: 12, background: C.surface, borderBottom: `1px solid ${C.border}`, fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 1, fontWeight: 700 }}>
+            <div>RANK</div><div>POS</div><div>NAME / TEAM</div>
+            <div style={{ textAlign: 'center' }}>YEAR</div>
+            <div style={{ textAlign: 'center' }}>CHANGE</div>
+          </div>
+          {/* Rows or empty state */}
+          {candidates.length === 0 ? (
+            <div style={{ padding: '48px 18px', textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🏆</div>
+              <div style={{ color: C.text, fontSize: 15, fontWeight: 700, marginBottom: 8 }}>No candidates yet</div>
+              <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
+                Go to the <strong style={{ color: C.accent }}>Sync</strong> tab, select <strong style={{ color: C.accent }}>🏆 Heisman Watch</strong> as the scan mode,<br />
+                then scan your Heisman Watch screenshot — it'll populate automatically.
               </div>
             </div>
+          ) : candidates.map((c, i) => (
+            <div
+              key={c.id}
+              onClick={() => setSelected(c)}
+              style={{
+                display: 'grid', gridTemplateColumns: '40px 64px 1fr 100px 60px',
+                gap: 12, padding: '13px 18px',
+                borderBottom: i < candidates.length - 1 ? `1px solid ${C.border}` : 'none',
+                alignItems: 'center', cursor: 'pointer',
+                background: selected?.id === c.id ? C.subtle : i === 0 ? C.accent + '08' : 'transparent',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.subtle }}
+              onMouseLeave={e => { e.currentTarget.style.background = selected?.id === c.id ? C.subtle : i === 0 ? C.accent + '08' : 'transparent' }}
+            >
+              {/* Rank badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, background: i === 0 ? C.accent : C.subtle, color: i === 0 ? C.bg : C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700 }}>{c.rank}</span>
+              </div>
+              {/* Position */}
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>{c.position || '—'}</div>
+              {/* Name / Team */}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.text, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.player_name}</div>
+                <div style={{ fontSize: 11, color: C.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.team_name}</div>
+              </div>
+              {/* Year */}
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.text, textAlign: 'center' }}>{c.class_year || '—'}</div>
+              {/* Trend arrow */}
+              <div style={{ textAlign: 'center', fontSize: 16 }}>
+                {c.trend === 'up'   && <span style={{ color: C.green }}>▲</span>}
+                {c.trend === 'down' && <span style={{ color: C.red }}>▼</span>}
+                {(!c.trend || c.trend === 'same') && <span style={{ color: C.muted, fontSize: 12 }}>—</span>}
+              </div>
+            </div>
+          ))}
+        </Card>
+
+        {/* Detail panel */}
+        {!isMobile && selected && (
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 2, marginBottom: 4, textTransform: 'uppercase' }}>
+                {selected.rank === 1 ? '🏆 FRONTRUNNER' : `CANDIDATE #${selected.rank}`}
+              </div>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, color: C.text, fontWeight: 700, lineHeight: 1.1, marginBottom: 4 }}>{selected.player_name}</div>
+              <div style={{ fontSize: 12, color: C.accent }}>{selected.team_name}</div>
+            </div>
+            {/* Stat tiles */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { label: 'POSITION', value: selected.position || '—' },
+                { label: 'CLASS',    value: selected.class_year || '—' },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ background: C.surface, padding: '8px 10px', borderRadius: 6 }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 15, color: C.text, fontWeight: 700 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+            {/* Trend */}
+            <div style={{ background: C.surface, padding: '10px 12px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20, color: selected.trend === 'up' ? C.green : selected.trend === 'down' ? C.red : C.muted }}>
+                {selected.trend === 'up' ? '▲' : selected.trend === 'down' ? '▼' : '—'}
+              </span>
+              <div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1 }}>TREND</div>
+                <div style={{ fontSize: 12, color: selected.trend === 'up' ? C.green : selected.trend === 'down' ? C.red : C.muted }}>
+                  {selected.trend === 'up' ? 'Rising' : selected.trend === 'down' ? 'Falling' : 'Holding'}
+                </div>
+              </div>
+            </div>
+            {/* Key stats */}
+            {selected.key_stats && Object.keys(selected.key_stats).length > 0 && (
+              <div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>KEY STATS</div>
+                {Object.entries(selected.key_stats).slice(0, 5).map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase' }}>{k.replace(/_/g, ' ')}</span>
+                    <span style={{ fontSize: 13, color: C.blue, fontWeight: 700 }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Notes */}
+            {selected.notes && (
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{selected.notes}</div>
+            )}
+            {/* Week updated */}
+            {selected.week_updated && (
+              <div style={{ fontSize: 10, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>Updated: Week {selected.week_updated}</div>
+            )}
+            {/* Remove button */}
+            <button
+              onClick={() => handleDelete(selected.id)}
+              style={{ background: 'transparent', border: `1px solid ${C.red}55`, color: C.red, borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, fontWeight: 700, marginTop: 4 }}
+            >
+              ✕ REMOVE CANDIDATE
+            </button>
           </Card>
-        )
-        : (
-          <>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-              {positions.map(p => <PillBtn key={p} small={isMobile} active={pos === p} onClick={() => setPos(p)}>{p}</PillBtn>)}
-            </div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {filtered.map(p => {
-                const cols = STAT_COLS[p.pos] || Object.keys(p.stats || {}).slice(0, 4)
-                return (
-                  <Card key={p.id}>
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: isMobile ? 'column' : 'row',
-                      alignItems: isMobile ? 'flex-start' : 'center',
-                      gap: isMobile ? 12 : 16,
-                    }}>
-                      <div style={{ minWidth: 140 }}>
-                        <Badge color={p.pos === 'QB' ? C.blue : p.pos === 'RB' ? C.green : C.accent}>{p.pos}</Badge>
-                        <div style={{ color: C.text, fontWeight: 700, fontSize: 16, marginTop: 6 }}>{p.name}</div>
-                        <div style={{ color: C.muted, fontSize: 12 }}>{p.team}</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: isMobile ? 16 : 24, flexWrap: 'wrap' }}>
-                        {cols.map(col => p.stats?.[col] !== undefined && (
-                          <div key={col} style={{ textAlign: 'center' }}>
-                            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 26, color: C.accent }}>{Number(p.stats[col]).toLocaleString()}</div>
-                            <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>{col.replace(/_/g, ' ')}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-          </>
         )}
+      </div>
     </div>
   )
 }
@@ -2870,7 +3056,7 @@ export default function App() {
             {!isMobile && (
               <>
                 <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
-                <button onClick={() => setTab('Dashboard')} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 HEISMAN</button>
+                <button onClick={() => setTab('Heisman')} style={{ background: 'none', border: 'none', color: tab === 'Heisman' ? C.accent : C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 HEISMAN</button>
                 <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
               </>
             )}
@@ -2941,7 +3127,7 @@ export default function App() {
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
-              {tab === 'Stats'     && <PlayerStats players={data.players} isMobile={isMobile} />}
+              {tab === 'Heisman'   && <HeismanTab heismanCandidates={data.heismanCandidates || []} onRefresh={fetchData} isMobile={isMobile} />}
               {tab === 'Media'     && (
                 <MediaCenter
                   teams={data.teams} games={data.games} players={data.players}
