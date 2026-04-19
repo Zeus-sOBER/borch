@@ -1,193 +1,235 @@
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useState } from 'react'
+
+const C = {
+  bg:      '#09090b',
+  surface: '#101014',
+  card:    '#17171d',
+  border:  '#1f1f2e',
+  accent:  '#c9a84c',
+  green:   '#4caf7d',
+  red:     '#e05252',
+  blue:    '#4a90d9',
+  purple:  '#9b7fd4',
+  text:    '#e8eaed',
+  muted:   '#8b949e',
+  subtle:  '#2a2a3a',
+}
 
 export default function HeismanWatch() {
-  const [candidates, setCandidates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [candidates, setCandidates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     player_name: '',
     position: '',
     team_id: '',
     coach_id: '',
     rank: 1,
-    key_stats: {},
     notes: '',
-    trophy_screenshot_url: ''
-  });
+    trophy_screenshot_url: '',
+  })
 
   // Fetch candidates on mount
   useEffect(() => {
-    fetchCandidates();
-  }, []);
+    fetchCandidates()
+  }, [])
 
   const fetchCandidates = async () => {
     try {
-      setLoading(true);
-      const res = await fetch('/api/heisman-watch');
-      const data = await res.json();
+      setLoading(true)
+      const res = await fetch('/api/heisman-watch')
+      const data = await res.json()
       if (data.success) {
-        setCandidates(data.candidates || []);
+        setCandidates(data.candidates || [])
+        setError(null)
       } else {
-        setError(data.error);
+        setError(data.error || 'Failed to load candidates')
       }
     } catch (err) {
-      setError(err.message);
-      console.error('Error fetching Heisman candidates:', err);
+      setError(err.message)
+      console.error('Error fetching candidates:', err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleAddCandidate = async (e) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
+      const payload = {
+        ...formData,
+        team_id: parseInt(formData.team_id),
+        coach_id: parseInt(formData.coach_id),
+        rank: parseInt(formData.rank),
+      }
+
       const res = await fetch('/api/heisman-watch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      const data = await res.json();
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+
       if (data.success) {
-        setCandidates([...candidates, data.candidate].sort((a, b) => a.rank - b.rank));
-        setFormData({ player_name: '', position: '', team_id: '', coach_id: '', rank: 1, key_stats: {}, notes: '', trophy_screenshot_url: '' });
-        setShowAddForm(false);
+        setCandidates([...candidates, data.candidate].sort((a, b) => a.rank - b.rank))
+        setFormData({ player_name: '', position: '', team_id: '', coach_id: '', rank: 1, notes: '', trophy_screenshot_url: '' })
+        setShowForm(false)
+        setError(null)
       } else {
-        setError(data.error);
+        setError(data.error)
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message)
     }
-  };
+  }
 
-  const handleDeleteCandidate = async (id) => {
-    if (!confirm('Remove this candidate from Heisman Watch?')) return;
+  const handleDelete = async (id) => {
+    if (!confirm('Remove this candidate?')) return
     try {
-      const res = await fetch(`/api/heisman-watch?id=${id}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
+      const res = await fetch(`/api/heisman-watch?id=${id}`, { method: 'DELETE' })
+      const data = await res.json()
       if (data.success) {
-        setCandidates(candidates.filter(c => c.id !== id));
+        setCandidates(candidates.filter(c => c.id !== id))
+        setError(null)
       } else {
-        setError(data.error);
+        setError(data.error)
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message)
     }
-  };
+  }
 
-  const getMedalEmoji = (rank) => {
-    const medals = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣' };
-    return medals[rank] || '';
-  };
+  const getMedal = (rank) => {
+    const medals = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣' }
+    return medals[rank] || ''
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-100 p-8">
-      <div className="max-w-6xl mx-auto">
+    <div style={{ background: C.bg, minHeight: '100vh', padding: '24px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-amber-900 mb-3">🏆 Heisman Trophy Watch 🏆</h1>
-          <p className="text-lg text-amber-700">
-            Tracking the top 5 candidates competing for college football's most prestigious award
-          </p>
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, margin: 0, marginBottom: 8 }}>🏆 HEISMAN WATCH</h1>
+          <p style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0 }}>Top 5 candidates competing for college football's most prestigious award</p>
         </div>
 
-        {/* Error Message */}
+        {/* Error */}
         {error && (
-          <div className="bg-red-200 border border-red-400 text-red-700 px-6 py-4 rounded-lg mb-6">
+          <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, color: C.red, padding: 16, borderRadius: 6, marginBottom: 24, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 0.5 }}>
             {error}
           </div>
         )}
 
-        {/* Add Candidate Button */}
-        <div className="flex justify-center mb-8">
+        {/* Add Button */}
+        <div style={{ marginBottom: 24 }}>
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition"
+            onClick={() => setShowForm(!showForm)}
+            style={{
+              background: showForm ? C.red : C.accent,
+              color: C.bg,
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontFamily: "'Oswald', sans-serif",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 1,
+            }}
           >
-            {showAddForm ? '✕ Cancel' : '+ Add Candidate'}
+            {showForm ? '✕ CANCEL' : '+ ADD CANDIDATE'}
           </button>
         </div>
 
         {/* Add Form */}
-        {showAddForm && (
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-10 border-4 border-amber-300">
-            <h2 className="text-2xl font-bold text-amber-900 mb-6">Add New Candidate</h2>
-            <form onSubmit={handleAddCandidate} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {showForm && (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 24, borderRadius: 6, marginBottom: 32 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>ADD NEW CANDIDATE</h2>
+            <form onSubmit={handleAddCandidate}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <input
                   type="text"
                   placeholder="Player Name"
                   required
                   value={formData.player_name}
                   onChange={(e) => setFormData({ ...formData, player_name: e.target.value })}
-                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
                 />
                 <input
                   type="text"
-                  placeholder="Position (e.g., QB, RB, WR)"
+                  placeholder="Position (QB, RB, WR, etc.)"
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <input
                   type="number"
-                  placeholder="Team ID (integer from teams table)"
+                  placeholder="Team ID"
                   required
                   value={formData.team_id}
-                  onChange={(e) => setFormData({ ...formData, team_id: parseInt(e.target.value) || '' })}
-                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                  onChange={(e) => setFormData({ ...formData, team_id: e.target.value })}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
                 />
                 <input
                   type="number"
-                  placeholder="Coach ID (integer from coaches table)"
+                  placeholder="Coach ID"
                   required
                   value={formData.coach_id}
-                  onChange={(e) => setFormData({ ...formData, coach_id: parseInt(e.target.value) || '' })}
-                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                  onChange={(e) => setFormData({ ...formData, coach_id: e.target.value })}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-amber-900 mb-2">Rank (1-5)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5"
-                    required
-                    value={formData.rank}
-                    onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) })}
-                    className="border-2 border-amber-300 p-3 rounded-lg w-full focus:outline-none focus:border-amber-500"
-                  />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <select
+                  value={formData.rank}
+                  onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) })}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
+                >
+                  <option value="1">Rank 1 (Top Contender)</option>
+                  <option value="2">Rank 2</option>
+                  <option value="3">Rank 3</option>
+                  <option value="4">Rank 4</option>
+                  <option value="5">Rank 5</option>
+                </select>
                 <input
                   type="url"
                   placeholder="Trophy Screenshot URL (Google Drive)"
                   value={formData.trophy_screenshot_url}
                   onChange={(e) => setFormData({ ...formData, trophy_screenshot_url: e.target.value })}
-                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500 md:mt-6"
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}
                 />
               </div>
 
               <textarea
-                placeholder="Notes/Commentary (e.g., 'Hot streak after 400 passing yards')"
+                placeholder="Notes/Commentary"
                 rows="3"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 10, borderRadius: 4, fontFamily: 'monospace', fontSize: 12, marginBottom: 12, boxSizing: 'border-box' }}
               />
 
               <button
                 type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-lg transition"
+                style={{
+                  background: C.green,
+                  color: C.bg,
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  width: '100%',
+                }}
               >
-                ✓ Add Candidate
+                ✓ ADD CANDIDATE
               </button>
             </form>
           </div>
@@ -195,88 +237,100 @@ export default function HeismanWatch() {
 
         {/* Loading */}
         {loading && (
-          <div className="text-center py-12">
-            <div className="text-3xl mb-4">⏳</div>
-            <p className="text-amber-700 font-semibold">Loading candidates...</p>
+          <div style={{ textAlign: 'center', padding: 48, color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}>
+            ⏳ LOADING...
           </div>
         )}
 
-        {/* Candidates Grid */}
+        {/* Candidates */}
         {!loading && candidates.length > 0 && (
-          <div className="space-y-6">
-            {candidates.map((candidate) => (
+          <div style={{ display: 'grid', gap: 20 }}>
+            {candidates.map((c) => (
               <div
-                key={candidate.id}
-                className="bg-white rounded-xl shadow-xl overflow-hidden border-l-8 border-amber-500 hover:shadow-2xl transition"
+                key={c.id}
+                style={{
+                  background: C.card,
+                  border: `1px solid ${C.border}`,
+                  borderLeft: `4px solid ${C.accent}`,
+                  padding: 20,
+                  borderRadius: 6,
+                }}
               >
-                <div className="p-8">
-                  {/* Header with Medal and Delete */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4 flex-1">
-                      <span className="text-5xl">{getMedalEmoji(candidate.rank)}</span>
-                      <div className="flex-1">
-                        <h3 className="text-3xl font-bold text-amber-900">
-                          {candidate.player_name}
-                          {candidate.position && <span className="text-sm text-amber-600 ml-2">({candidate.position})</span>}
-                        </h3>
-                        <p className="text-lg text-amber-600 font-semibold">
-                          {candidate.teams?.name || 'Team Unknown'}
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          Coach: <span className="font-semibold">{candidate.coaches?.name || 'Unknown'}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteCandidate(candidate.id)}
-                      className="text-red-500 hover:text-red-700 font-bold text-2xl p-2"
-                      title="Remove from watch"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* Stats Grid */}
-                  {candidate.key_stats && Object.keys(candidate.key_stats).length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-amber-50 p-4 rounded-lg">
-                      {Object.entries(candidate.key_stats).map(([stat, value]) => (
-                        <div key={stat}>
-                          <p className="text-xs text-amber-700 uppercase font-bold">{stat}</p>
-                          <p className="text-2xl font-bold text-amber-900">{value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Notes */}
-                  {candidate.notes && (
-                    <div className="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                      <p className="text-sm text-blue-900 italic">💭 {candidate.notes}</p>
-                    </div>
-                  )}
-
-                  {/* Trophy Screenshot */}
-                  {candidate.trophy_screenshot_url && (
-                    <div className="mt-6">
-                      <p className="text-xs text-gray-600 font-bold mb-2">HEISMAN TROPHY SCREENSHOT:</p>
-                      <a
-                        href={candidate.trophy_screenshot_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block"
-                      >
-                        <img
-                          src={candidate.trophy_screenshot_url}
-                          alt={`${candidate.player_name} Heisman Trophy`}
-                          className="max-h-48 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border-2 border-amber-200"
-                        />
-                      </a>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Updated: {new Date(candidate.trophy_screenshot_date).toLocaleDateString()} | Week {candidate.week_updated || '—'}
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 32 }}>{getMedal(c.rank)}</span>
+                    <div>
+                      <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0, marginBottom: 4 }}>
+                        {c.player_name} {c.position && `(${c.position})`}
+                      </h3>
+                      <p style={{ fontSize: 13, color: C.accent, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
+                        {c.teams?.name || 'TEAM UNKNOWN'}
+                      </p>
+                      <p style={{ fontSize: 11, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0 }}>
+                        Coach: {c.coaches?.name || 'Unknown'}
                       </p>
                     </div>
-                  )}
+                  </div>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: C.red,
+                      cursor: 'pointer',
+                      fontSize: 20,
+                      padding: 0,
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
+
+                {/* Stats */}
+                {c.key_stats && Object.keys(c.key_stats).length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 16, padding: 12, background: C.surface, borderRadius: 4 }}>
+                    {Object.entries(c.key_stats).map(([stat, value]) => (
+                      <div key={stat}>
+                        <p style={{ fontSize: 10, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0, marginBottom: 4, textTransform: 'uppercase' }}>
+                          {stat}
+                        </p>
+                        <p style={{ fontSize: 16, fontWeight: 700, color: C.blue, fontFamily: "'Oswald', sans-serif", margin: 0 }}>
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Notes */}
+                {c.notes && (
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 12, borderRadius: 4, marginBottom: 16 }}>
+                    <p style={{ fontSize: 11, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0, lineHeight: 1.5 }}>
+                      💭 {c.notes}
+                    </p>
+                  </div>
+                )}
+
+                {/* Screenshot */}
+                {c.trophy_screenshot_url && (
+                  <div>
+                    <p style={{ fontSize: 10, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+                      Heisman Trophy Screenshot
+                    </p>
+                    <img
+                      src={c.trophy_screenshot_url}
+                      alt={`${c.player_name} Heisman Trophy`}
+                      style={{
+                        maxHeight: 200,
+                        borderRadius: 4,
+                        border: `1px solid ${C.border}`,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => window.open(c.trophy_screenshot_url, '_blank')}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -284,19 +338,16 @@ export default function HeismanWatch() {
 
         {/* Empty State */}
         {!loading && candidates.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-lg shadow-lg">
-            <div className="text-6xl mb-4">🏆</div>
-            <p className="text-2xl text-amber-900 font-bold mb-2">No candidates yet!</p>
-            <p className="text-amber-700 mb-6">Start adding players to the Heisman Watch</p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-8 rounded-lg"
-            >
-              + Add First Candidate
-            </button>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 48, borderRadius: 6, textAlign: 'center' }}>
+            <p style={{ fontSize: 20, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>
+              🏆 NO CANDIDATES YET
+            </p>
+            <p style={{ fontSize: 12, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5, margin: 0 }}>
+              Start adding players to the Heisman Trophy Watch
+            </p>
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
