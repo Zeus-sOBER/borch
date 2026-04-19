@@ -1178,7 +1178,7 @@ function Standings({ teams, isMobile, settings }) {
 }
 
 // ── Share Card overlay ────────────────────────────────────────
-function ShareCard({ game, onClose }) {
+function ShareCard({ game, onClose, apRankings = [] }) {
   if (!game) return null
   const homeWon = game.home_score > game.away_score
   const awayWon = game.away_score > game.home_score
@@ -1186,6 +1186,8 @@ function ShareCard({ game, onClose }) {
     ? game.game_type.replace(/_/g, ' ').toUpperCase()
     : null
   const isFinal = gameIsFinal(game)
+  const homeRank = getApRank(game.home_team, apRankings)
+  const awayRank = getApRank(game.away_team, apRankings)
 
   return (
     <div
@@ -1265,7 +1267,11 @@ function ShareCard({ game, onClose }) {
                   color: homeWon ? C.text : C.muted,
                   lineHeight: 1.1,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{game.home_team}</div>
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  {homeRank && <ApRankBadge rank={homeRank} style={{ fontSize: 11 }} />}
+                  {game.home_team}
+                </div>
                 <div style={{ fontSize: 10, letterSpacing: 2, marginTop: 3, textTransform: 'uppercase',
                   color: homeWon ? C.accent : C.muted, fontFamily: "'Oswald', sans-serif",
                 }}>
@@ -1323,7 +1329,11 @@ function ShareCard({ game, onClose }) {
                   color: awayWon ? C.text : C.muted,
                   lineHeight: 1.1,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{game.away_team}</div>
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  {awayRank && <ApRankBadge rank={awayRank} style={{ fontSize: 11 }} />}
+                  {game.away_team}
+                </div>
                 <div style={{ fontSize: 10, letterSpacing: 2, marginTop: 3, textTransform: 'uppercase',
                   color: awayWon ? C.accent : C.muted, fontFamily: "'Oswald', sans-serif",
                 }}>
@@ -1390,6 +1400,7 @@ function Season({ games, teams, isMobile, settings }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
   const [sharingGame, setSharingGame] = useState(null)
   useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
+  const seasonApRankings = settings?.ap_rankings || []
 
   const weeksWithGames = new Set(games.map(g => g.week).filter(w => w != null))
   const allWeeks = Array.from({ length: 19 }, (_, i) => i) // 0–18
@@ -1449,6 +1460,8 @@ function Season({ games, teams, isMobile, settings }) {
             const homeHuman = humanNames.has((g.home_team || '').toLowerCase())
             const awayHuman = humanNames.has((g.away_team || '').toLowerCase())
             const gameLabel = g.game_type && g.game_type !== 'regular' ? g.game_type.replace(/_/g, ' ') : null
+            const homeRank  = getApRank(g.home_team, seasonApRankings)
+            const awayRank  = getApRank(g.away_team, seasonApRankings)
             return (
               <Card key={g.id} style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -1474,7 +1487,10 @@ function Season({ games, teams, isMobile, settings }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     {homeHuman && <span style={{ color: C.accent, fontSize: 9 }}>◆</span>}
                     <div>
-                      <div style={{ color: homeWon ? C.text : isFinal ? C.muted : C.text, fontWeight: homeWon ? 700 : 400, fontSize: 15 }}>{g.home_team}</div>
+                      <div style={{ color: homeWon ? C.text : isFinal ? C.muted : C.text, fontWeight: homeWon ? 700 : 400, fontSize: 15, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {homeRank && <ApRankBadge rank={homeRank} />}
+                        {g.home_team}
+                      </div>
                       <div style={{ color: C.subtle, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Home</div>
                     </div>
                   </div>
@@ -1485,7 +1501,10 @@ function Season({ games, teams, isMobile, settings }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     {awayHuman && <span style={{ color: C.accent, fontSize: 9 }}>◆</span>}
                     <div>
-                      <div style={{ color: awayWon ? C.text : isFinal ? C.muted : C.text, fontWeight: awayWon ? 700 : 400, fontSize: 15 }}>{g.away_team}</div>
+                      <div style={{ color: awayWon ? C.text : isFinal ? C.muted : C.text, fontWeight: awayWon ? 700 : 400, fontSize: 15, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {awayRank && <ApRankBadge rank={awayRank} />}
+                        {g.away_team}
+                      </div>
                       <div style={{ color: C.subtle, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Away</div>
                     </div>
                   </div>
@@ -1516,7 +1535,7 @@ function Season({ games, teams, isMobile, settings }) {
       </div>
 
       {/* Share card overlay */}
-      {sharingGame && <ShareCard game={sharingGame} onClose={() => setSharingGame(null)} />}
+      {sharingGame && <ShareCard game={sharingGame} onClose={() => setSharingGame(null)} apRankings={seasonApRankings} />}
     </div>
   )
 }
@@ -2600,7 +2619,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
 }
 
 // ── Matchups Tab ───────────────────────────────────────────────
-function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen, commPin, onPinSet }) {
+function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen, onArticlesChange, commPin, onPinSet }) {
   const finalGames    = games.filter(gameIsFinal)
   const upcomingGames = games.filter(g => !gameIsFinal(g) && g.home_team && g.away_team)
 
@@ -2610,8 +2629,28 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
   const [pinInput,      setPinInput]      = useState('')
   const [pinError,      setPinError]      = useState('')
   const [showPinFor,    setShowPinFor]    = useState(null) // game key
+  const [localArticles, setLocalArticles] = useState([])  // freshly generated this session
 
   const gameKey = (g) => `${g.home_team}|${g.away_team}|${g.week}`
+
+  // Merge saved articles with any freshly generated ones from this session
+  const allPreviewArticles = [
+    ...localArticles,
+    ...(articles || []).filter(a => a.article_type === 'matchup-preview'),
+  ]
+
+  // Get the blurb for a game — first paragraph of the most recent preview
+  const getGameBlurb = (g) => {
+    const title = `Matchup Preview: ${g.home_team} vs ${g.away_team}`
+    const match = allPreviewArticles.find(a =>
+      a.title?.includes(g.home_team) && a.title?.includes(g.away_team) &&
+      (g.week == null || a.title?.includes(`Week ${g.week}`) || a.week == null || a.week === g.week)
+    )
+    if (!match?.content) return null
+    // Return first non-empty paragraph (up to 280 chars)
+    const firstPara = match.content.split(/\n+/).find(p => p.trim().length > 30) || ''
+    return firstPara.length > 280 ? firstPara.slice(0, 277) + '…' : firstPara
+  }
 
   const generatePreview = async (g, pin) => {
     const key = gameKey(g)
@@ -2634,15 +2673,19 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
         setGenError(e => ({ ...e, [key]: data.error || 'Generation failed' }))
         return
       }
-      // Open the article right away
-      if (onArticleOpen) {
-        onArticleOpen({
-          title: `Matchup Preview: ${g.home_team} vs ${g.away_team}${g.week ? ` — Week ${g.week}` : ''}`,
-          article_type: 'matchup-preview',
-          week: g.week,
-          content: data.article,
-        })
+      // Store article locally so blurb shows immediately
+      const newArticle = {
+        title: `Matchup Preview: ${g.home_team} vs ${g.away_team}${g.week ? ` — Week ${g.week}` : ''}`,
+        article_type: 'matchup-preview',
+        week: g.week,
+        content: data.article,
+        created_at: new Date().toISOString(),
       }
+      setLocalArticles(prev => [newArticle, ...prev])
+      // Refresh parent article list (so it persists on next load)
+      onArticlesChange?.()
+      // Open the article
+      if (onArticleOpen) onArticleOpen(newArticle)
     } catch (e) {
       setGenError(err => ({ ...err, [key]: 'Something went wrong. Try again.' }))
     } finally {
@@ -2820,6 +2863,18 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
             </div>
           </div>
         )}
+
+        {/* Saved preview blurb — visible to all users */}
+        {(() => {
+          const blurb = getGameBlurb(g)
+          if (!blurb) return null
+          return (
+            <div style={{ borderTop: `1px solid ${C.border}`, padding: '14px 20px', background: C.surface + '66' }}>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.accent, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 8 }}>✦ Preview</div>
+              <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.65, margin: 0 }}>{blurb}</p>
+            </div>
+          )
+        })()}
 
         {/* Generate Preview Article */}
         {(() => {
@@ -3173,7 +3228,7 @@ export default function App() {
               {tab === 'Dashboard' && <Dashboard  {...data} heismanCandidates={data.heismanCandidates || []} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
-              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
+              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
               {tab === 'Heisman'   && <HeismanTab heismanCandidates={data.heismanCandidates || []} onRefresh={fetchData} isMobile={isMobile} />}
               {tab === 'Media'     && (
                 <MediaCenter
