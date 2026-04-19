@@ -144,6 +144,30 @@ export default async function handler(req, res) {
     const { data: championships } = await supabase
       .from('championships').select('*').order('season', { ascending: false }).limit(10);
 
+    // ── AP Rankings ──────────────────────────────────────────────────────
+    const { data: leagueSettings } = await supabase
+      .from('league_settings').select('ap_rankings').eq('id', 1).single();
+    const apRankings = leagueSettings?.ap_rankings || [];
+
+    // Helper: get a team's AP rank (or null)
+    const getApRank = (teamName) => {
+      if (!teamName || !apRankings.length) return null;
+      const entry = apRankings.find(r =>
+        (r.team_name || '').toLowerCase().trim() === teamName.toLowerCase().trim()
+      );
+      return entry ? entry.rank : null;
+    };
+
+    // Build ranked team name string: e.g. "#4 Alabama" or just "Alabama"
+    const withRank = (teamName) => {
+      const rank = getApRank(teamName);
+      return rank ? `#${rank} ${teamName}` : teamName;
+    };
+
+    const apRankingsSummary = apRankings.length > 0
+      ? apRankings.slice(0, 25).map(r => `#${r.rank} ${r.team_name}${r.record ? ` (${r.record})` : ''}`).join('\n')
+      : 'AP Poll not yet available.';
+
     // ── Build rich coach profiles ────────────────────────────────────────
     const coachProfiles = coaches.map(c => {
       const teamRecord = teams.find(t => (t.name || t.team_name || '').toLowerCase() === c.team?.toLowerCase());
@@ -195,7 +219,9 @@ export default async function handler(req, res) {
             ch => ch.team_name?.toLowerCase() === tName.toLowerCase()
           );
           const champBadge = champs.length > 0 ? ` 🏆x${champs.length}` : '';
-          return `#${i + 1} ${tName} (${t.wins}-${t.losses})${champBadge}${coach ? ` — Coach: ${coach.name}` : ''}`;
+          const apRank = getApRank(tName);
+          const apBadge = apRank ? ` [AP #${apRank}]` : '';
+          return `#${i + 1} ${tName} (${t.wins}-${t.losses})${champBadge}${apBadge}${coach ? ` — Coach: ${coach.name}` : ''}`;
         }).join('\n')
       : 'No standings data yet.';
 
@@ -249,6 +275,9 @@ COLLEGE FOOTBALL SCHEDULE:
 - Weeks 16-17: CFP Quarterfinals and Semifinals
 - Week 18+: National Championship Game
 
+AP TOP 25 RANKINGS:
+${apRankingsSummary}
+
 ABSOLUTE RULES:
 1. Reference every coach by name at least once — they are the stars.
 2. Only write about the ${coaches.length} human-coached teams. CPU teams don't exist.
@@ -257,6 +286,7 @@ ABSOLUTE RULES:
 5. Adjust tone to match season phase — early = hopeful, late = urgent, playoff = electric.
 6. Reference championship history where relevant — it adds legacy and stakes.
 7. Tone: ESPN-professional with personality. Light rivalry trash talk welcome.
+8. AP RANKINGS: Whenever you mention a team that appears in the AP Top 25, always include their ranking inline — e.g. "#4 Alabama" or "No. 4 Alabama". This applies to every mention of every ranked team throughout the article.
 
 THE ${coaches.length} COACHES IN THIS LEAGUE:
 ${coachProfiles}
@@ -392,10 +422,12 @@ FORMAT:
           ? `Last meeting (Wk ${h2h[0].week}): ${h2h[0].home_team} ${h2h[0].home_score}–${h2h[0].away_score} ${h2h[0].away_team}`
           : null
 
+        const homeRankedLabel = withRank(g.home_team);
+        const awayRankedLabel = withRank(g.away_team);
         return [
-          `MATCHUP: Week ${gameWeek}${gameLabel} — ${g.home_team} vs ${g.away_team}`,
-          `  ${g.home_team} (${homeTeam ? `${homeTeam.wins}-${homeTeam.losses}` : 'record unknown'}${homeCoach ? `, Coach ${homeCoach.name}` : ''}) · Recent form: ${recentForm(g.home_team)}`,
-          `  ${g.away_team} (${awayTeam ? `${awayTeam.wins}-${awayTeam.losses}` : 'record unknown'}${awayCoach ? `, Coach ${awayCoach.name}` : ''}) · Recent form: ${recentForm(g.away_team)}`,
+          `MATCHUP: Week ${gameWeek}${gameLabel} — ${homeRankedLabel} vs ${awayRankedLabel}`,
+          `  ${homeRankedLabel} (${homeTeam ? `${homeTeam.wins}-${homeTeam.losses}` : 'record unknown'}${homeCoach ? `, Coach ${homeCoach.name}` : ''}) · Recent form: ${recentForm(g.home_team)}`,
+          `  ${awayRankedLabel} (${awayTeam ? `${awayTeam.wins}-${awayTeam.losses}` : 'record unknown'}${awayCoach ? `, Coach ${awayCoach.name}` : ''}) · Recent form: ${recentForm(g.away_team)}`,
           `  Series: ${seriesSummary}`,
           lastMeeting ? `  ${lastMeeting}` : null,
         ].filter(Boolean).join('\n')
@@ -485,13 +517,19 @@ ${weekContext.isChampionship ? '🏆 CHAMPIONSHIP WEEK — legacy on the line.' 
           `\n\nAll meetings:\n` +
           h2hGames.map(g => `  Week ${g.week}${g.game_type && g.game_type !== 'regular' ? ` [${g.game_type.replace(/_/g, ' ')}]` : ''}: ${g.home_team} ${g.home_score} — ${g.away_score} ${g.away_team}`).join('\n');
 
+      const homeRanked = withRank(homeTeam);
+      const awayRanked = withRank(awayTeam);
+      const homeApRankNote = getApRank(homeTeam) ? `AP Rank: #${getApRank(homeTeam)}` : 'AP Rank: Unranked';
+      const awayApRankNote = getApRank(awayTeam) ? `AP Rank: #${getApRank(awayTeam)}` : 'AP Rank: Unranked';
+
       userPrompt = `Write a Matchup Preview article for Week ${week || '?'} (${weekContext.phase}) of the Dynasty Universe season.
 
 MATCHUP:
-${homeTeam} (Home) vs ${awayTeam} (Away)
+${homeRanked} (Home) vs ${awayRanked} (Away)
 Week: ${week || 'unknown'} — ${weekContext.phase}
 
 ${homeTeam.toUpperCase()} — coached by ${homeCoach?.name || 'unknown'}:
+${homeApRankNote}
 Record: ${homeRecord ? `${homeRecord.wins}-${homeRecord.losses}` : 'unknown'}
 Points For: ${homeRecord?.pts ?? 'not tracked'} | Points Against: ${homeRecord?.pts_against ?? 'not tracked'}
 Coach style: ${homeCoach?.coaching_style || 'not on record'}
@@ -501,6 +539,7 @@ Key players:
 ${formatPlayers(homePlayers)}
 
 ${awayTeam.toUpperCase()} — coached by ${awayCoach?.name || 'unknown'}:
+${awayApRankNote}
 Record: ${awayRecord ? `${awayRecord.wins}-${awayRecord.losses}` : 'unknown'}
 Points For: ${awayRecord?.pts ?? 'not tracked'} | Points Against: ${awayRecord?.pts_against ?? 'not tracked'}
 Coach style: ${awayCoach?.coaching_style || 'not on record'}

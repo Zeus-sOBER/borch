@@ -325,6 +325,35 @@ const ARTICLE_TYPE_LABELS = {
   'league-preview':    { label: 'League Preview',    icon: '📅' },
 }
 
+// ── AP Rankings helper ─────────────────────────────────────────────────────────
+function getApRank(teamName, apRankings = []) {
+  if (!teamName || !apRankings?.length) return null
+  const n = teamName.toLowerCase().trim()
+  const entry = apRankings.find(r => (r.team_name || '').toLowerCase().trim() === n)
+  return entry ? entry.rank : null
+}
+
+function ApRankBadge({ rank, style = {} }) {
+  if (!rank) return null
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontFamily: "'Oswald', sans-serif",
+      fontSize: 10,
+      fontWeight: 700,
+      color: '#b8960c',
+      background: 'rgba(184,150,12,0.12)',
+      border: '1px solid rgba(184,150,12,0.35)',
+      borderRadius: 4,
+      padding: '1px 5px',
+      marginRight: 5,
+      verticalAlign: 'middle',
+      letterSpacing: 0.5,
+      ...style,
+    }}>#{rank}</span>
+  )
+}
+
 function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen, heismanCandidates = [] }) {
   const finalGames  = games.filter(gameIsFinal)
   const currentWeek = settings?.current_week ?? 0
@@ -896,6 +925,9 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
         })
         const homeTeam = teams.find(t => t.name === g.home_team)
         const awayTeam = teams.find(t => t.name === g.away_team)
+        const dashApRankings = settings?.ap_rankings || []
+        const homeApRank = getApRank(g.home_team, dashApRankings)
+        const awayApRank = getApRank(g.away_team, dashApRankings)
         return (
           <div style={{ marginBottom: 24 }}>
             <SectionLabel color={C.accent}>Next Matchup</SectionLabel>
@@ -907,7 +939,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
               <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 {/* Home */}
                 <div style={{ flex: 1, minWidth: 100 }}>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text }}>{g.home_team}</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {homeApRank && <ApRankBadge rank={homeApRank} />}
+                    {g.home_team}
+                  </div>
                   {homeTeam && <div style={{ color: C.muted, fontSize: 11 }}>{homeTeam.wins}-{homeTeam.losses}</div>}
                 </div>
                 {/* VS + H2H */}
@@ -921,7 +956,10 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                 </div>
                 {/* Away */}
                 <div style={{ flex: 1, minWidth: 100, textAlign: isMobile ? 'left' : 'right' }}>
-                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text }}>{g.away_team}</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 6, justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
+                    {awayApRank && <ApRankBadge rank={awayApRank} />}
+                    {g.away_team}
+                  </div>
                   {awayTeam && <div style={{ color: C.muted, fontSize: 11 }}>{awayTeam.wins}-{awayTeam.losses}</div>}
                 </div>
               </div>
@@ -2678,6 +2716,9 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
     const awayRecent = getRecentGames(g.away_team)
     const homeTeam = findTeam(g.home_team)
     const awayTeam = findTeam(g.away_team)
+    const cardApRankings = settings?.ap_rankings || []
+    const homeApRank = getApRank(g.home_team, cardApRankings)
+    const awayApRank = getApRank(g.away_team, cardApRankings)
 
     let homeH2HWins = 0, awayH2HWins = 0
     h2h.forEach(m => {
@@ -2700,7 +2741,10 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
 
           {/* Home team */}
           <div>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{g.home_team}</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+              {homeApRank && <ApRankBadge rank={homeApRank} style={{ fontSize: 12 }} />}
+              {g.home_team}
+            </div>
             {homeTeam && (
               <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
                 {homeTeam.wins}-{homeTeam.losses}{homeTeam.coach ? ` · ${homeTeam.coach}` : ''}
@@ -2734,7 +2778,10 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
 
           {/* Away team */}
           <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{g.away_team}</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
+              {awayApRank && <ApRankBadge rank={awayApRank} style={{ fontSize: 12 }} />}
+              {g.away_team}
+            </div>
             {awayTeam && (
               <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
                 {awayTeam.wins}-{awayTeam.losses}{awayTeam.coach ? ` · ${awayTeam.coach}` : ''}
