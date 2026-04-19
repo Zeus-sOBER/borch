@@ -33,23 +33,35 @@ export default async function handler(req, res) {
  * GET: Fetch top 5 Heisman candidates with team and coach info
  */
 async function getHeismanCandidates(req, res) {
-  const { data, error } = await supabase
-    .from('heisman_watch')
-    .select(`
-      *,
-      teams:team_id(id, name, logo_url, mascot_emoji, team_color),
-      coaches:coach_id(id, name, username, coaching_style)
-    `)
-    .order('rank', { ascending: true })
-    .limit(5);
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      throw new Error('Missing Supabase environment variables. Check Vercel settings.');
+    }
 
-  if (error) throw error;
+    const { data, error } = await supabase
+      .from('heisman_watch')
+      .select(`
+        *,
+        teams:team_id(id, name, logo_url, mascot_emoji, team_color),
+        coaches:coach_id(id, name, username, coaching_style)
+      `)
+      .order('rank', { ascending: true })
+      .limit(5);
 
-  return res.status(200).json({
-    success: true,
-    candidates: data || [],
-    count: data?.length || 0
-  });
+    if (error) {
+      console.error('Supabase Query Error:', error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      candidates: data || [],
+      count: data?.length || 0
+    });
+  } catch (err) {
+    console.error('getHeismanCandidates Error:', err);
+    throw err;
+  }
 }
 
 /**
