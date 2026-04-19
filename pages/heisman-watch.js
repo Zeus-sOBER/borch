@@ -8,7 +8,9 @@ export default function HeismanWatch() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     player_name: '',
+    position: '',
     team_id: '',
+    coach_id: '',
     rank: 1,
     key_stats: {},
     notes: '',
@@ -49,7 +51,7 @@ export default function HeismanWatch() {
       const data = await res.json();
       if (data.success) {
         setCandidates([...candidates, data.candidate].sort((a, b) => a.rank - b.rank));
-        setFormData({ player_name: '', team_id: '', rank: 1, key_stats: {}, notes: '', trophy_screenshot_url: '' });
+        setFormData({ player_name: '', position: '', team_id: '', coach_id: '', rank: 1, key_stats: {}, notes: '', trophy_screenshot_url: '' });
         setShowAddForm(false);
       } else {
         setError(data.error);
@@ -125,10 +127,28 @@ export default function HeismanWatch() {
                 />
                 <input
                   type="text"
-                  placeholder="Team ID (UUID)"
+                  placeholder="Position (e.g., QB, RB, WR)"
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  type="number"
+                  placeholder="Team ID (integer from teams table)"
                   required
                   value={formData.team_id}
-                  onChange={(e) => setFormData({ ...formData, team_id: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, team_id: parseInt(e.target.value) || '' })}
+                  className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
+                />
+                <input
+                  type="number"
+                  placeholder="Coach ID (integer from coaches table)"
+                  required
+                  value={formData.coach_id}
+                  onChange={(e) => setFormData({ ...formData, coach_id: parseInt(e.target.value) || '' })}
                   className="border-2 border-amber-300 p-3 rounded-lg focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -192,12 +212,18 @@ export default function HeismanWatch() {
                 <div className="p-8">
                   {/* Header with Medal and Delete */}
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-1">
                       <span className="text-5xl">{getMedalEmoji(candidate.rank)}</span>
-                      <div>
-                        <h3 className="text-3xl font-bold text-amber-900">{candidate.player_name}</h3>
+                      <div className="flex-1">
+                        <h3 className="text-3xl font-bold text-amber-900">
+                          {candidate.player_name}
+                          {candidate.position && <span className="text-sm text-amber-600 ml-2">({candidate.position})</span>}
+                        </h3>
                         <p className="text-lg text-amber-600 font-semibold">
                           {candidate.teams?.name || 'Team Unknown'}
+                        </p>
+                        <p className="text-sm text-gray-700">
+                          Coach: <span className="font-semibold">{candidate.coaches?.name || 'Unknown'}</span>
                         </p>
                       </div>
                     </div>

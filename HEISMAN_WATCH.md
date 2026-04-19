@@ -87,12 +87,22 @@ Visit: `yourdynasty.vercel.app/heisman-watch`
 2. Click **+ Add Candidate**
 3. Fill form:
    - **Player Name:** e.g., "Travis Hunter"
-   - **Team ID:** UUID from `teams` table
+   - **Position:** e.g., "QB", "RB", "WR" (optional)
+   - **Team ID:** Integer ID from `teams` table (e.g., `280` for Virginia Tech)
+   - **Coach ID:** Integer ID from `coaches` table (e.g., `1` for Jesus Laris)
    - **Rank:** 1-5 (1 = top contender)
    - **Key Stats:** (optional JSON object)
    - **Notes:** e.g., "Leading nation in passing yards"
    - **Trophy Screenshot URL:** Direct Google Drive link
 4. Click **✓ Add Candidate**
+
+**Example:**
+- Player Name: Travis Hunter
+- Position: QB
+- Team ID: 280 (Virginia Tech)
+- Coach ID: 1 (Jesus Laris)
+- Rank: 1
+- Notes: "Hot streak with 400+ passing yards last game"
 
 ### Getting Trophy Screenshot URLs
 1. In CFB 25/26, navigate to trophy/awards screen
@@ -140,20 +150,36 @@ GET /api/heisman-watch
   "success": true,
   "candidates": [
     {
-      "id": "uuid",
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "player_name": "Travis Hunter",
-      "team_id": "uuid",
+      "position": "QB",
+      "team_id": 280,
+      "coach_id": 1,
       "rank": 1,
-      "key_stats": {"passing_yards": 4500, "tds": 45},
-      "notes": "Leading the Heisman race",
+      "key_stats": {"passing_yards": 4500, "tds": 45, "rushing_yards": 850},
+      "notes": "Leading the Heisman race with 400+ yard passing games",
       "trophy_screenshot_url": "https://drive.google.com/...",
       "trophy_screenshot_date": "2026-04-18T...",
-      "week_updated": 8
+      "week_updated": 8,
+      "season": 1,
+      "teams": {
+        "id": 280,
+        "name": "Virginia Tech",
+        "mascot_emoji": "🦃",
+        "team_color": "861F41"
+      },
+      "coaches": {
+        "id": 1,
+        "name": "Jesus Laris",
+        "username": "PrimalPegasus14",
+        "coaching_style": "Pro Style Offense"
+      }
     }
   ],
   "count": 5
 }
 ```
+**Includes:** Team name, color, emoji + Coach name, username, coaching style
 
 ### POST — Add Candidate
 ```bash
@@ -162,15 +188,20 @@ Content-Type: application/json
 
 {
   "player_name": "Travis Hunter",
-  "team_id": "uuid-of-team",
+  "position": "QB",
+  "team_id": 280,
+  "coach_id": 1,
   "rank": 1,
   "key_stats": {"passing_yards": 4500, "tds": 45},
-  "notes": "Hot streak continues",
+  "notes": "Hot streak continues, leading nation in passing yards",
   "trophy_screenshot_url": "https://drive.google.com/uc?id=...",
-  "week_updated": 8
+  "week_updated": 8,
+  "season": 1
 }
 ```
-**Response:** 201 Created + candidate object
+**Response:** 201 Created + candidate object with team and coach info  
+**Required Fields:** player_name, team_id (integer), coach_id (integer), rank (1-5)  
+**Note:** Both `team_id` and `coach_id` are integers from their respective tables.
 
 ### PUT — Update Candidate
 ```bash
@@ -199,21 +230,30 @@ DELETE /api/heisman-watch?id=candidate-uuid
 ```sql
 heisman_watch table:
 ├── id (UUID, primary key)
-├── player_name (varchar 255)
-├── team_id (UUID, foreign key → teams.id)
-├── rank (integer, 1-5)
-├── key_stats (JSON: {passing_yards, tds, rushing_yards, rushing_tds, etc})
+├── player_name (varchar 255, required)
+├── position (varchar 50, optional - QB, RB, WR, etc)
+├── team_id (BIGINT, foreign key → teams.id, required)
+├── coach_id (BIGINT, foreign key → coaches.id, required)
+├── rank (integer, 1-5, required)
+├── key_stats (JSONB, optional - {passing_yards, tds, rushing_yards, etc})
 ├── notes (text, optional commentary)
-├── trophy_screenshot_url (text, Google Drive link)
-├── trophy_screenshot_date (timestamp)
-├── week_updated (integer, which week)
+├── trophy_screenshot_url (text, optional - Google Drive link)
+├── trophy_screenshot_date (timestamp, auto-set on creation)
+├── week_updated (integer, optional - which week)
+├── season (integer, defaults to 1)
 ├── created_at (timestamp)
 └── updated_at (timestamp)
+
+Foreign Keys:
+├── team_id → teams(id)
+└── coach_id → coaches(id)
 
 Indexes:
 ├── heisman_watch_rank_idx (on rank)
 ├── heisman_watch_team_idx (on team_id)
-└── heisman_watch_week_idx (on week_updated)
+├── heisman_watch_coach_idx (on coach_id)
+├── heisman_watch_week_idx (on week_updated)
+└── heisman_watch_season_idx (on season)
 ```
 
 ---
@@ -269,11 +309,14 @@ DELETE FROM heisman_watch WHERE player_name = 'John Doe';
 
 | Problem | Solution |
 |---------|----------|
+| **Missing required fields error** | Ensure you provide: player_name, team_id, coach_id, and rank |
+| **"coach_id must be a positive integer"** | Go to Supabase → coaches table → copy the `id` column value (e.g., `1`) |
+| **"team_id must be a positive integer"** | Go to Supabase → teams table → copy the `id` column value (e.g., `280`) |
+| **Foreign key constraint error** | Both `team_id` and `coach_id` must exist in their respective tables |
 | **Image not showing** | Check Drive link uses `?export=download` & is public |
-| **Candidate won't save** | Verify Team ID exists in `teams` table |
+| **Candidate won't save** | Verify both Team ID and Coach ID exist. Check the IDs in Supabase tables directly. |
 | **Page 404** | Confirm `pages/heisman-watch.js` is in correct folder |
-| **API error 500** | Check browser console & Supabase connection |
-| **Can't find Team ID** | Go to Supabase → tables → teams → copy UUID from id column |
+| **API error 500** | Check browser console for detailed error message & Supabase connection |
 
 ---
 
@@ -397,5 +440,28 @@ Every time you modify Heisman Watch:
 
 ---
 
-**Last Updated:** April 18, 2026  
-**Status:** ✅ Complete & Consolidated
+## Summary of Changes (Latest Update)
+
+**Added Coach Linking:**
+- Heisman candidates now link to BOTH team AND coach
+- Shows "Coach: Jesus Laris" under player name
+- Allows tracking which coach produced the Heisman candidate
+- API returns full coach & team details for rich display
+
+**Schema Updates:**
+- Added `coach_id` (BIGINT, foreign key to coaches table)
+- Added `position` field (QB, RB, WR, etc.)
+- Added `season` field (defaults to 1)
+- Both `team_id` and `coach_id` are now required
+
+**Why This Matters:**
+Instead of just showing "Travis Hunter from Virginia Tech", you now see:
+- Travis Hunter (QB)
+- Virginia Tech 🦃
+- Coach: Jesus Laris
+
+---
+
+**Last Updated:** April 19, 2026  
+**Status:** ✅ Complete & Consolidated  
+**Database Links:** Teams (team_id) + Coaches (coach_id)
