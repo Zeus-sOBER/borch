@@ -9,123 +9,112 @@ const C = {
   green:   '#4caf7d',
   red:     '#e05252',
   blue:    '#4a90d9',
-  purple:  '#9b7fd4',
   text:    '#e8eaed',
   muted:   '#8b949e',
   subtle:  '#2a2a3a',
 }
 
+// Trend arrow — matches the game's CHANGE column
+function TrendArrow({ trend }) {
+  if (trend === 'up')   return <span style={{ color: C.green,  fontSize: 16 }}>▲</span>
+  if (trend === 'down') return <span style={{ color: C.red,    fontSize: 16 }}>▼</span>
+  return                       <span style={{ color: C.muted,  fontSize: 12 }}>—</span>
+}
+
+// Rank badge — styled like the game (no emoji, just the number)
+function RankBadge({ rank }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 24, height: 24,
+      background: rank === 1 ? C.accent : C.subtle,
+      color: rank === 1 ? C.bg : C.text,
+      borderRadius: 2,
+      fontFamily: "'Oswald', sans-serif",
+      fontSize: 12, fontWeight: 700,
+    }}>{rank}</span>
+  )
+}
+
 export default function HeismanWatch() {
-  const [candidates, setCandidates] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [showForm, setShowForm] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState(null)
-  const [formData, setFormData] = useState({
-    player_name: '',
-    position: '',
-    team_id: '',
-    coach_id: '',
-    rank: 1,
-    notes: '',
-    trophy_screenshot_url: '',
-  })
+  const [candidates, setCandidates]   = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState(null)
+  const [selected, setSelected]       = useState(null)
+  const [showForm, setShowForm]       = useState(false)
+  const [showImport, setShowImport]   = useState(false)
+  const [importFileId, setImportFileId] = useState('')
+  const [importing, setImporting]     = useState(false)
+  const [importMsg, setImportMsg]     = useState(null)
 
-  // Fetch candidates on mount
-  useEffect(() => {
-    fetchCandidates()
-  }, [])
+  const BLANK_FORM = {
+    player_name: '', position: '', team_name: '', coach_name: '',
+    class_year: '', trend: 'same', rank: 1, notes: '',
+  }
+  const [form, setForm] = useState(BLANK_FORM)
 
-  // Set first candidate as selected by default
+  useEffect(() => { fetchCandidates() }, [])
+
   useEffect(() => {
-    if (candidates.length > 0 && !selectedCandidate) {
-      setSelectedCandidate(candidates[0])
-    }
+    if (candidates.length > 0 && !selected) setSelected(candidates[0])
   }, [candidates])
 
-  const fetchCandidates = async () => {
+  // ── Fetch ────────────────────────────────────────────────────────────────────
+  async function fetchCandidates() {
     try {
       setLoading(true)
       const res = await fetch('/api/heisman-watch')
-
       if (!res.ok) {
         const text = await res.text()
-        console.error('API Error:', res.status, text)
-        setError(`API Error: ${res.status} - ${text.substring(0, 100)}`)
+        setError(`API Error ${res.status}: ${text.substring(0, 120)}`)
         return
       }
-
-      const text = await res.text()
-      if (!text) {
-        setError('Empty response from API')
-        return
-      }
-
-      const data = JSON.parse(text)
+      const data = await res.json()
       if (data.success) {
         setCandidates(data.candidates || [])
         setError(null)
       } else {
-        setError(data.error || 'Failed to load candidates')
+        setError(data.error || 'Unknown error')
       }
     } catch (err) {
-      console.error('Error fetching candidates:', err)
-      setError(`Error: ${err.message}. Check browser console for details.`)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAddCandidate = async (e) => {
+  // ── Manual add ───────────────────────────────────────────────────────────────
+  async function handleAdd(e) {
     e.preventDefault()
     try {
-      const payload = {
-        ...formData,
-        team_id: parseInt(formData.team_id),
-        coach_id: parseInt(formData.coach_id),
-        rank: parseInt(formData.rank),
-      }
-
       const res = await fetch('/api/heisman-watch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...form, rank: parseInt(form.rank) }),
       })
-
-      if (!res.ok) {
-        const text = await res.text()
-        console.error('API Error:', res.status, text)
-        setError(`API Error: ${res.status}`)
-        return
-      }
-
-      const text = await res.text()
-      const data = JSON.parse(text)
-
+      const data = await res.json()
       if (data.success) {
-        setCandidates([...candidates, data.candidate].sort((a, b) => a.rank - b.rank))
-        setFormData({ player_name: '', position: '', team_id: '', coach_id: '', rank: 1, notes: '', trophy_screenshot_url: '' })
+        setCandidates(prev => [...prev, data.candidate].sort((a, b) => a.rank - b.rank))
+        setForm(BLANK_FORM)
         setShowForm(false)
         setError(null)
       } else {
         setError(data.error || 'Failed to add candidate')
       }
     } catch (err) {
-      console.error('Error adding candidate:', err)
-      setError(`Error: ${err.message}`)
+      setError(err.message)
     }
   }
 
-  const handleDelete = async (id) => {
+  // ── Delete ───────────────────────────────────────────────────────────────────
+  async function handleDelete(id) {
     if (!confirm('Remove this candidate?')) return
     try {
       const res = await fetch(`/api/heisman-watch?id=${id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.success) {
-        setCandidates(candidates.filter(c => c.id !== id))
-        if (selectedCandidate?.id === id) {
-          setSelectedCandidate(candidates[0] || null)
-        }
+        setCandidates(prev => prev.filter(c => c.id !== id))
+        if (selected?.id === id) setSelected(null)
         setError(null)
       } else {
         setError(data.error)
@@ -135,252 +124,319 @@ export default function HeismanWatch() {
     }
   }
 
-  const getMedal = (rank) => {
-    const medals = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣' }
-    return medals[rank] || ''
+  // ── Screenshot import ────────────────────────────────────────────────────────
+  async function handleImport(e) {
+    e.preventDefault()
+    if (!importFileId.trim()) return
+    try {
+      setImporting(true)
+      setImportMsg(null)
+      const res = await fetch('/api/heisman-watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: importFileId.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setCandidates(data.candidates || [])
+        setSelected(data.candidates?.[0] || null)
+        setImportMsg({ type: 'ok', text: data.message })
+        setImportFileId('')
+        setError(null)
+      } else {
+        setImportMsg({ type: 'err', text: data.error || 'Import failed' })
+      }
+    } catch (err) {
+      setImportMsg({ type: 'err', text: err.message })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  // ── Shared input style ───────────────────────────────────────────────────────
+  const inp = {
+    background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+    padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12, width: '100%',
+    boxSizing: 'border-box',
   }
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', padding: '24px' }}>
-      <div style={{ maxWidth: 1600, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 2, margin: 0, marginBottom: 8 }}>🏆 HEISMAN TROPHY WATCH</h1>
-          <p style={{ fontSize: 12, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: 0 }}>Top 5 candidates competing for college football's most prestigious award</p>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: '24px', fontFamily: "'Oswald', sans-serif" }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* ── Page Header ───────────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: C.text, letterSpacing: 2, margin: 0, marginBottom: 4 }}>
+            🏆 HEISMAN TROPHY WATCH
+          </h1>
+          <p style={{ fontSize: 11, color: C.muted, letterSpacing: 1, margin: 0 }}>
+            Top 5 candidates competing for college football's most prestigious award
+          </p>
         </div>
 
-        {/* Error */}
+        {/* ── Error banner ──────────────────────────────────────────────────── */}
         {error && (
-          <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, color: C.red, padding: 12, borderRadius: 4, marginBottom: 24, fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 0.5 }}>
+          <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, color: C.red, padding: '10px 14px', borderRadius: 4, marginBottom: 20, fontSize: 11, letterSpacing: 0.5 }}>
             {error}
           </div>
         )}
 
-        {/* Add Button */}
-        <div style={{ marginBottom: 24 }}>
+        {/* ── Action bar ────────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           <button
-            onClick={() => setShowForm(!showForm)}
-            style={{
-              background: showForm ? C.red : C.accent,
-              color: C.bg,
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontFamily: "'Oswald', sans-serif",
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 1,
-            }}
+            onClick={() => { setShowForm(f => !f); setShowImport(false) }}
+            style={{ background: showForm ? C.red : C.accent, color: C.bg, border: 'none', padding: '7px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}
           >
             {showForm ? '✕ CANCEL' : '+ ADD CANDIDATE'}
           </button>
+          <button
+            onClick={() => { setShowImport(i => !i); setShowForm(false); setImportMsg(null) }}
+            style={{ background: showImport ? C.red : '#2a2a3a', color: C.text, border: `1px solid ${C.border}`, padding: '7px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}
+          >
+            {showImport ? '✕ CANCEL' : '📸 IMPORT FROM SCREENSHOT'}
+          </button>
         </div>
 
-        {/* Add Form */}
+        {/* ── Screenshot import form ────────────────────────────────────────── */}
+        {showImport && (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16, borderRadius: 4, marginBottom: 24 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.text, letterSpacing: 1, margin: '0 0 4px 0' }}>IMPORT FROM GAME SCREENSHOT</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: '0 0 12px 0' }}>
+              Share your Heisman Watch screenshot to Google Drive, then paste the file ID below (from the Drive URL: drive.google.com/file/d/<strong style={{color:C.accent}}>FILE_ID</strong>/view)
+            </p>
+            <form onSubmit={handleImport} style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Google Drive file ID"
+                value={importFileId}
+                onChange={e => setImportFileId(e.target.value)}
+                required
+                style={{ ...inp, flex: 1 }}
+              />
+              <button
+                type="submit"
+                disabled={importing}
+                style={{ background: C.green, color: C.bg, border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif', whiteSpace: 'nowrap" }}
+              >
+                {importing ? '⏳ READING...' : '✓ IMPORT'}
+              </button>
+            </form>
+            {importMsg && (
+              <p style={{ fontSize: 11, color: importMsg.type === 'ok' ? C.green : C.red, margin: '8px 0 0 0' }}>
+                {importMsg.text}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Manual add form ───────────────────────────────────────────────── */}
         {showForm && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 20, borderRadius: 4, marginBottom: 32 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, margin: '0 0 16px 0' }}>ADD CANDIDATE</h2>
-            <form onSubmit={handleAddCandidate}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <input type="text" placeholder="Player Name" required value={formData.player_name} onChange={(e) => setFormData({ ...formData, player_name: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
-                <input type="text" placeholder="Position (QB, RB, WR)" value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16, borderRadius: 4, marginBottom: 24 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.text, letterSpacing: 1, margin: '0 0 14px 0' }}>ADD CANDIDATE</p>
+            <form onSubmit={handleAdd}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <input placeholder="Player Name *" required value={form.player_name} onChange={e => setForm({...form, player_name: e.target.value})} style={inp} />
+                <input placeholder="Position (QB, HB, WR…)" value={form.position} onChange={e => setForm({...form, position: e.target.value})} style={inp} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <input type="number" placeholder="Team ID" required value={formData.team_id} onChange={(e) => setFormData({ ...formData, team_id: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
-                <input type="number" placeholder="Coach ID" required value={formData.coach_id} onChange={(e) => setFormData({ ...formData, coach_id: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <input placeholder="Team Name *" required value={form.team_name} onChange={e => setForm({...form, team_name: e.target.value})} style={inp} />
+                <input placeholder="Coach Name (optional)" value={form.coach_name} onChange={e => setForm({...form, coach_name: e.target.value})} style={inp} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <select value={formData.rank} onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
-                  <option value="1">Rank 1</option>
-                  <option value="2">Rank 2</option>
-                  <option value="3">Rank 3</option>
-                  <option value="4">Rank 4</option>
-                  <option value="5">Rank 5</option>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <input placeholder="Class Year (JR, SR (RS)…)" value={form.class_year} onChange={e => setForm({...form, class_year: e.target.value})} style={inp} />
+                <select value={form.trend} onChange={e => setForm({...form, trend: e.target.value})} style={{ ...inp, fontFamily: 'monospace' }}>
+                  <option value="up">▲ Trending Up</option>
+                  <option value="same">— No Change</option>
+                  <option value="down">▼ Trending Down</option>
                 </select>
-                <input type="url" placeholder="Trophy Screenshot URL" value={formData.trophy_screenshot_url} onChange={(e) => setFormData({ ...formData, trophy_screenshot_url: e.target.value })} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
+                <select value={form.rank} onChange={e => setForm({...form, rank: parseInt(e.target.value)})} style={{ ...inp, fontFamily: 'monospace' }}>
+                  {[1,2,3,4,5].map(r => <option key={r} value={r}>Rank #{r}</option>)}
+                </select>
               </div>
-              <textarea placeholder="Notes" rows="2" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: 8, borderRadius: 4, fontFamily: 'monospace', fontSize: 12, marginBottom: 12, boxSizing: 'border-box' }} />
-              <button type="submit" style={{ background: C.green, color: C.bg, border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>✓ ADD</button>
+              <textarea
+                placeholder="Notes (optional)"
+                rows={2}
+                value={form.notes}
+                onChange={e => setForm({...form, notes: e.target.value})}
+                style={{ ...inp, marginBottom: 10 }}
+              />
+              <button type="submit" style={{ background: C.green, color: C.bg, border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>
+                ✓ ADD
+              </button>
             </form>
           </div>
         )}
 
-        {/* Main Content */}
+        {/* ── Loading ───────────────────────────────────────────────────────── */}
+        {loading && (
+          <div style={{ padding: 48, textAlign: 'center', color: C.muted, fontSize: 12, letterSpacing: 1 }}>⏳ LOADING...</div>
+        )}
+
+        {/* ── Main layout: table + detail panel ────────────────────────────── */}
         {!loading && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
-            {/* Left: Table */}
+          <div style={{ display: 'grid', gridTemplateColumns: candidates.length > 0 ? '1fr 300px' : '1fr', gap: 20 }}>
+
+            {/* ── Left: candidates table ─────────────────────────────────────── */}
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
-              {/* Header Bar */}
-              <div style={{ background: C.accent, color: C.bg, padding: '12px 16px', fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: 2 }}>
+              {/* Gold header bar — matches the game */}
+              <div style={{ background: C.accent, color: C.bg, padding: '12px 16px', fontSize: 16, fontWeight: 700, letterSpacing: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                 🏆 HEISMAN TROPHY
               </div>
 
-              {/* Column Headers */}
-              <div style={{ display: 'grid', gridTemplateColumns: '40px 80px 1fr 100px 60px', background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '8px 16px', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', fontWeight: 700, gap: 12 }}>
+              {/* Column headers */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '44px 60px 1fr 100px 60px',
+                background: C.surface, borderBottom: `1px solid ${C.border}`,
+                padding: '8px 16px', gap: 12,
+                fontSize: 10, letterSpacing: 1, color: C.muted, fontWeight: 700,
+              }}>
                 <div>RANK</div>
                 <div>POS</div>
-                <div>NAME / TEAM / COACH</div>
-                <div>STAT</div>
-                <div>TREND</div>
+                <div>NAME / TEAM</div>
+                <div style={{ textAlign: 'center' }}>YEAR</div>
+                <div style={{ textAlign: 'center' }}>CHANGE</div>
               </div>
 
               {/* Rows */}
-              {candidates.length > 0 ? (
-                <div>
-                  {candidates.map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => setSelectedCandidate(c)}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '40px 80px 1fr 100px 60px',
-                        gap: 12,
-                        padding: '12px 16px',
-                        borderBottom: `1px solid ${C.border}`,
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        background: selectedCandidate?.id === c.id ? C.subtle : 'transparent',
-                        transition: 'background 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = C.subtle}
-                      onMouseLeave={(e) => e.currentTarget.style.background = selectedCandidate?.id === c.id ? C.subtle : 'transparent'}
-                    >
-                      {/* Rank */}
-                      <div style={{ fontSize: 20, fontWeight: 700, color: C.accent }}>
-                        {getMedal(c.rank)}
-                      </div>
+              {candidates.length > 0 ? candidates.map(c => (
+                <div
+                  key={c.id}
+                  onClick={() => setSelected(c)}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '44px 60px 1fr 100px 60px',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderBottom: `1px solid ${C.border}`,
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: selected?.id === c.id ? C.subtle : 'transparent',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.subtle}
+                  onMouseLeave={e => e.currentTarget.style.background = selected?.id === c.id ? C.subtle : 'transparent'}
+                >
+                  {/* Rank */}
+                  <div><RankBadge rank={c.rank} /></div>
 
-                      {/* Position */}
-                      <div style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
-                        {c.position || '—'}
-                      </div>
+                  {/* Position */}
+                  <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
+                    {c.position || '—'}
+                  </div>
 
-                      {/* Name / Team / Coach */}
-                      <div>
-                        <p style={{ fontSize: 13, fontFamily: "'Oswald', sans-serif", color: C.text, fontWeight: 700, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
-                          {c.player_name}
-                        </p>
-                        <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.accent, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
-                          {c.teams?.name || 'TEAM UNKNOWN'}
-                        </p>
-                        <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
-                          Coach: {c.coaches?.name || 'Unknown'}
-                        </p>
-                      </div>
+                  {/* Name / Team */}
+                  <div>
+                    <p style={{ fontSize: 13, color: C.text, fontWeight: 700, letterSpacing: 0.5, margin: 0, marginBottom: 1 }}>
+                      {c.player_name}
+                    </p>
+                    <p style={{ fontSize: 10, color: C.accent, letterSpacing: 0.5, margin: 0 }}>
+                      {c.team_name}
+                    </p>
+                  </div>
 
-                      {/* Key Stat */}
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: 14, fontFamily: "'Oswald', sans-serif", color: C.blue, fontWeight: 700, margin: 0 }}>
-                          {c.key_stats?.passing_yards || c.key_stats?.rushing_yards || '—'}
-                        </p>
-                        <p style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
-                          {c.key_stats?.passing_yards ? 'PASS YDS' : c.key_stats?.rushing_yards ? 'RUSH YDS' : ''}
-                        </p>
-                      </div>
+                  {/* Class year */}
+                  <div style={{ fontSize: 11, color: C.text, textAlign: 'center', letterSpacing: 0.5 }}>
+                    {c.class_year || '—'}
+                  </div>
 
-                      {/* Delete Button */}
-                      <div style={{ textAlign: 'right' }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(c.id)
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: C.red,
-                            cursor: 'pointer',
-                            fontSize: 14,
-                            padding: 0,
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                  {/* Trend */}
+                  <div style={{ textAlign: 'center' }}>
+                    <TrendArrow trend={c.trend} />
+                  </div>
                 </div>
-              ) : (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1 }}>
-                  NO CANDIDATES YET
+              )) : (
+                <div style={{ padding: '40px 16px', textAlign: 'center', color: C.muted, fontSize: 11, letterSpacing: 1 }}>
+                  NO CANDIDATES YET — ADD ONE OR IMPORT FROM A SCREENSHOT
                 </div>
               )}
             </div>
 
-            {/* Right: Detail Card */}
-            {selectedCandidate && (
-              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Player Name */}
-                <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
-                  <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: 0, marginBottom: 4, textTransform: 'uppercase' }}>
-                    {selectedCandidate.rank === 1 ? '🏆 TOP CONTENDER' : `RANK #${selectedCandidate.rank}`}
+            {/* ── Right: detail panel ────────────────────────────────────────── */}
+            {selected && (
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                {/* Rank label */}
+                <div>
+                  <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 4px 0', textTransform: 'uppercase' }}>
+                    {selected.rank === 1 ? '🏆 HEISMAN FRONTRUNNER' : `CANDIDATE #${selected.rank}`}
                   </p>
-                  <h3 style={{ fontSize: 18, fontFamily: "'Oswald', sans-serif", color: C.text, fontWeight: 700, letterSpacing: 1, margin: 0, marginBottom: 4 }}>
-                    {selectedCandidate.player_name}
+                  <h3 style={{ fontSize: 20, color: C.text, fontWeight: 700, letterSpacing: 1, margin: 0, marginBottom: 2 }}>
+                    {selected.player_name}
                   </h3>
-                  <p style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", color: C.accent, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
-                    {selectedCandidate.teams?.name}
+                  <p style={{ fontSize: 11, color: C.accent, letterSpacing: 0.5, margin: 0, marginBottom: 2 }}>
+                    {selected.team_name}
                   </p>
-                  <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0 }}>
-                    Coach: {selectedCandidate.coaches?.name}
-                  </p>
+                  {selected.coach_name && (
+                    <p style={{ fontSize: 10, color: C.muted, letterSpacing: 0.5, margin: 0 }}>
+                      Coach: {selected.coach_name}
+                    </p>
+                  )}
                 </div>
 
-                {/* Key Stats */}
-                {selectedCandidate.key_stats && Object.keys(selectedCandidate.key_stats).length > 0 && (
-                  <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
-                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                      KEY STATS
-                    </p>
-                    {Object.entries(selectedCandidate.key_stats).slice(0, 4).map(([stat, value]) => (
-                      <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 0.5, margin: 0, textTransform: 'uppercase' }}>
-                          {stat}
-                        </p>
-                        <p style={{ fontSize: 12, fontFamily: "'Oswald', sans-serif", color: C.blue, fontWeight: 700, margin: 0 }}>
-                          {value}
-                        </p>
+                {/* Quick stats row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                  <div style={{ background: C.surface, padding: '8px 10px', borderRadius: 4 }}>
+                    <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 2px 0' }}>POSITION</p>
+                    <p style={{ fontSize: 14, color: C.text, fontWeight: 700, margin: 0 }}>{selected.position || '—'}</p>
+                  </div>
+                  <div style={{ background: C.surface, padding: '8px 10px', borderRadius: 4 }}>
+                    <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 2px 0' }}>CLASS</p>
+                    <p style={{ fontSize: 14, color: C.text, fontWeight: 700, margin: 0 }}>{selected.class_year || '—'}</p>
+                  </div>
+                  <div style={{ background: C.surface, padding: '8px 10px', borderRadius: 4, gridColumn: '1 / -1' }}>
+                    <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 4px 0' }}>TREND</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <TrendArrow trend={selected.trend} />
+                      <span style={{ fontSize: 11, color: C.text }}>
+                        {selected.trend === 'up' ? 'Rising' : selected.trend === 'down' ? 'Falling' : 'Holding'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key stats */}
+                {selected.key_stats && Object.keys(selected.key_stats).length > 0 && (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 8px 0' }}>KEY STATS</p>
+                    {Object.entries(selected.key_stats).slice(0, 5).map(([stat, val]) => (
+                      <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 10, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>{stat.replace(/_/g, ' ')}</span>
+                        <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }}>{val}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {/* Notes */}
-                {selectedCandidate.notes && (
-                  <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
-                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                      NOTES
-                    </p>
-                    <p style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", color: C.text, lineHeight: 1.4, margin: 0 }}>
-                      {selectedCandidate.notes}
-                    </p>
+                {selected.notes && (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <p style={{ fontSize: 9, color: C.muted, letterSpacing: 1, margin: '0 0 6px 0' }}>NOTES</p>
+                    <p style={{ fontSize: 10, color: C.text, lineHeight: 1.5, margin: 0 }}>{selected.notes}</p>
                   </div>
                 )}
 
-                {/* Screenshot */}
-                {selectedCandidate.trophy_screenshot_url && (
-                  <div>
-                    <p style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", color: C.muted, letterSpacing: 1, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                      TROPHY SCREENSHOT
-                    </p>
-                    <img
-                      src={selectedCandidate.trophy_screenshot_url}
-                      alt={`${selectedCandidate.player_name} Heisman`}
-                      style={{ width: '100%', borderRadius: 4, border: `1px solid ${C.border}`, cursor: 'pointer' }}
-                      onClick={() => window.open(selectedCandidate.trophy_screenshot_url, '_blank')}
-                    />
-                  </div>
+                {/* Week updated */}
+                {selected.week_updated && (
+                  <p style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5, margin: 0, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                    LAST UPDATED: WEEK {selected.week_updated}
+                  </p>
                 )}
+
+                {/* Delete button */}
+                <button
+                  onClick={() => handleDelete(selected.id)}
+                  style={{
+                    background: 'transparent', border: `1px solid ${C.red}66`,
+                    color: C.red, cursor: 'pointer', padding: '6px 12px',
+                    borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                    fontFamily: "'Oswald', sans-serif", marginTop: 4,
+                  }}
+                >
+                  ✕ REMOVE CANDIDATE
+                </button>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: 'center', padding: 48, color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}>
-            ⏳ LOADING...
           </div>
         )}
       </div>
