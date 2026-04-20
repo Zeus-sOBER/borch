@@ -214,8 +214,8 @@ const ALL_NAV_ITEMS = [
   { id: 'Standings', icon: '📊', label: 'Standings' },
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
-  { id: 'Heisman',   icon: '🏆', label: 'Heisman' },
   { id: 'Media',     icon: '📰', label: 'Media' },
+  { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
 
@@ -228,23 +228,30 @@ function BottomNav({ tab, setTab, commPin }) {
       display: 'flex', zIndex: 200,
       paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
-      {navItems.map(item => (
-        <button key={item.id} onClick={() => setTab(item.id)} style={{
-          flex: 1, background: 'transparent', border: 'none',
-          padding: '8px 2px 6px', cursor: 'pointer',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: 2,
-          color: tab === item.id ? C.accent : C.muted,
-          borderTop: `2px solid ${tab === item.id ? C.accent : 'transparent'}`,
-          transition: 'all 0.1s',
-        }}>
-          <span style={{ fontSize: 20 }}>{item.icon}</span>
-          <span style={{
-            fontSize: 9, fontFamily: "'Oswald', sans-serif",
-            letterSpacing: 0.5, textTransform: 'uppercase',
-          }}>{item.label}</span>
-        </button>
-      ))}
+      {navItems.map(item => {
+        const isActive = item.href ? false : tab === item.id
+        return (
+          <button
+            key={item.id}
+            onClick={() => item.href ? (window.location.href = item.href) : setTab(item.id)}
+            style={{
+              flex: 1, background: 'transparent', border: 'none',
+              padding: '8px 2px 6px', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 2,
+              color: isActive ? C.accent : C.muted,
+              borderTop: `2px solid ${isActive ? C.accent : 'transparent'}`,
+              transition: 'all 0.1s',
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{item.icon}</span>
+            <span style={{
+              fontSize: 8, fontFamily: "'Oswald', sans-serif",
+              letterSpacing: 0.5, textTransform: 'uppercase',
+            }}>{item.label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

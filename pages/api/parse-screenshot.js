@@ -569,9 +569,56 @@ async function recomputeStandingsFromGames() {
         streak:      streak,
       }, { onConflict: 'name,season' });
     }
+
+    // After teams are updated, sync win/loss totals back to coaches table
+    await syncCoachRecordsFromTeams(records);
+
   } catch (err) {
     // Non-critical — never crash the main flow
     console.error('[recomputeStandings] error:', err.message);
+  }
+}
+
+// ─── Sync coach overall records from freshly-computed team records ────────────
+// Called automatically after recomputeStandingsFromGames so coach cards
+// stay in sync whenever a scores screenshot is imported.
+async function syncCoachRecordsFromTeams(records) {
+  try {
+    const { data: coaches } = await supabase
+      .from('coaches')
+      .select('id, name, team, overall_wins, overall_losses, season_records');
+
+    if (!coaches?.length) return;
+
+    for (const coach of coaches) {
+      if (!coach.team) continue;
+      const teamKey = coach.team.toLowerCase().trim();
+
+      // Find the recalculated record for this coach's team
+      const teamRecord = Object.entries(records).find(
+        ([name]) => name.toLowerCase().trim() === teamKey
+      );
+      if (!teamRecord) continue;
+
+      const [, rec] = teamRecord;
+
+      // Build / update season_records array (one entry per season)
+      const existingSeasonRecords = Array.isArray(coach.season_records) ? coach.season_records : [];
+      const season = rec.season ?? 1;
+      const updatedSeasonRecords = [
+        ...existingSeasonRecords.filter(r => r.season !== season),
+        { season, wins: rec.wins, losses: rec.losses },
+      ].sort((a, b) => a.season - b.season);
+
+      await supabase.from('coaches').update({
+        overall_wins:   rec.wins,
+        overall_losses: rec.losses,
+        season_records: updatedSeasonRecords,
+        updated_at:     new Date().toISOString(),
+      }).eq('id', coach.id);
+    }
+  } catch (err) {
+    console.error('[syncCoachRecords] error:', err.message);
   }
 }
 
