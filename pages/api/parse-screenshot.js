@@ -609,17 +609,44 @@ async function syncCoachRecordsFromTeams(records) {
 
       const [, rec] = teamRecord;
 
-      // Build / update season_records array (one entry per season)
+      // Build / update season_records array (one entry per season).
+      // PROTECTION: never downgrade an existing season entry that has more games
+      // than what the games table shows — this preserves manually-entered history
+      // when only some games have been imported yet.
       const existingSeasonRecords = Array.isArray(coach.season_records) ? coach.season_records : [];
       const season = rec.season ?? 1;
+      const existingEntry    = existingSeasonRecords.find(r => r.season === season);
+      const importedTotal    = (rec.wins   || 0) + (rec.losses   || 0);
+      const existingTotal    = (existingEntry?.wins || 0) + (existingEntry?.losses || 0);
+      // Only replace the season entry if the imported data accounts for at least as
+      // many games as what was already stored (avoids overwriting a 12-2 manual
+      // entry with a 1-0 partial import).
+      const newSeasonEntry = importedTotal >= existingTotal
+        ? { season, wins: rec.wins, losses: rec.losses }
+        : existingEntry;
+
       const updatedSeasonRecords = [
         ...existingSeasonRecords.filter(r => r.season !== season),
-        { season, wins: rec.wins, losses: rec.losses },
+        newSeasonEntry,
       ].sort((a, b) => a.season - b.season);
 
+      // Overall record — sum from season_records if available, otherwise use
+      // whatever we computed from the games table this scan.
+      const computedWins   = updatedSeasonRecords.reduce((s, r) => s + (r.wins   || 0), 0);
+      const computedLosses = updatedSeasonRecords.reduce((s, r) => s + (r.losses || 0), 0);
+
+      // PROTECTION: if the coach already has more total games recorded than
+      // what we derived from the games table (e.g. a manually-set career total
+      // with no season-by-season breakdown), keep the existing numbers.
+      // Only overwrite when the imported data is at least as complete.
+      const existingGames  = (coach.overall_wins || 0) + (coach.overall_losses || 0);
+      const computedGames  = computedWins + computedLosses;
+      const finalWins   = computedGames >= existingGames ? computedWins   : (coach.overall_wins   || 0);
+      const finalLosses = computedGames >= existingGames ? computedLosses : (coach.overall_losses || 0);
+
       await supabase.from('coaches').update({
-        overall_wins:   rec.wins,
-        overall_losses: rec.losses,
+        overall_wins:   finalWins,
+        overall_losses: finalLosses,
         season_records: updatedSeasonRecords,
         updated_at:     new Date().toISOString(),
       }).eq('id', coach.id);
