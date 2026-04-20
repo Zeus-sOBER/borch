@@ -108,10 +108,11 @@ function winPct(w, l) {
 }
 
 // ── Coach Card (summary view) ──────────────────────────────────
-function CoachCard({ coach, onSelect, isCommissioner }) {
+function CoachCard({ coach, onSelect, isCommissioner, championships = [] }) {
   const achievements = coach.achievements || []
   const latestSeason = (coach.season_records || []).slice(-1)[0]
   const accentColor  = coach.team_color || C.accent
+  const coachChamps  = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
 
   return (
     <Card onClick={() => onSelect(coach)} style={{ position: 'relative', borderColor: coach.team_color ? coach.team_color + '55' : C.border }}>
@@ -187,6 +188,29 @@ function CoachCard({ coach, onSelect, isCommissioner }) {
           {achievements.length > 5 && (
             <span style={{ color: C.muted, fontSize: 12, padding: '3px 4px' }}>+{achievements.length - 5} more</span>
           )}
+        </div>
+      )}
+
+      {/* Championship rings strip */}
+      {coachChamps.length > 0 && (
+        <div style={{
+          marginTop: 12, paddingTop: 10,
+          borderTop: `1px solid ${accentColor}33`,
+          display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 14 }}>🏆</span>
+          {coachChamps.map(ch => (
+            <span key={ch.id || ch.season} style={{
+              background: 'linear-gradient(135deg, #c9a84c22, #c9a84c11)',
+              border: '1px solid #c9a84c55',
+              borderRadius: 4, padding: '2px 9px',
+              fontSize: 11, fontFamily: "'Oswald', sans-serif",
+              color: C.accent, letterSpacing: 0.5, whiteSpace: 'nowrap',
+            }}>S{ch.season}</span>
+          ))}
+          <span style={{ color: C.accent, fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>
+            {coachChamps.length === 1 ? 'National Champion' : `${coachChamps.length}× National Champ`}
+          </span>
         </div>
       )}
 
@@ -338,7 +362,8 @@ function SeasonRecordEditor({ records = [], onChange }) {
 }
 
 // ── Coach detail / edit modal ──────────────────────────────────
-function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }) {
+function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [] }) {
+  const coachChamps = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
   const [editing, setEditing]   = useState(false)
   const [saving,  setSaving]    = useState(false)
   const [form,    setForm]      = useState({ ...coach })
@@ -465,6 +490,47 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose }
               {form.hire_date     && <div><div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Joined Dynasty</div><div style={{ color: C.text, fontSize: 14 }}>{new Date(form.hire_date).toLocaleDateString()}</div></div>}
               <div><div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Seasons</div><div style={{ color: C.text, fontSize: 14 }}>{form.seasons_coached}</div></div>
             </div>
+
+            {/* Championship titles */}
+            {coachChamps.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ color: C.accent, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, fontFamily: "'Oswald', sans-serif" }}>
+                  🏆 National Championship{coachChamps.length > 1 ? 's' : ''} ({coachChamps.length})
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {coachChamps.map(ch => (
+                    <div key={ch.id || ch.season} style={{
+                      background: 'linear-gradient(135deg, #1e170a, #1a140820)',
+                      border: '1px solid #c9a84c55',
+                      borderRadius: 8, padding: '14px 18px',
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', flexWrap: 'wrap', gap: 10,
+                    }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 18 }}>🏆</span>
+                          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.accent }}>
+                            Season {ch.season} · {ch.team_name}
+                          </span>
+                        </div>
+                        {ch.opponent_team && (
+                          <div style={{ color: C.muted, fontSize: 12 }}>
+                            def. {ch.opponent_team}{ch.opponent_record ? ` (${ch.opponent_record})` : ''}
+                            {ch.result ? ` — ${ch.result}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      {ch.record && (
+                        <div style={{
+                          fontFamily: "'Oswald', sans-serif", fontSize: 18,
+                          color: C.accent, letterSpacing: 1,
+                        }}>{ch.record}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Achievements */}
             {(form.achievements || []).length > 0 && (
@@ -753,6 +819,8 @@ export default function CoachesPage() {
   const [commPin,     setCommPin]     = useState(null)
   const [showPinGate, setShowPinGate] = useState(false)
 
+  const [championships, setChampionships] = useState([])
+
   const load = useCallback(async () => {
     setLoading(true)
     const [coachRes, teamRes] = await Promise.all([
@@ -763,6 +831,7 @@ export default function CoachesPage() {
     const teamData  = await teamRes.json()
     setCoaches(coachData.coaches || [])
     setTeams(teamData.teams || [])
+    setChampionships(teamData.championships || [])
     setLoading(false)
   }, [])
 
@@ -883,7 +952,7 @@ export default function CoachesPage() {
             : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
                 {shown.map(c => (
-                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} />
+                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} />
                 ))}
               </div>
             )
@@ -906,6 +975,7 @@ export default function CoachesPage() {
             pin={commPin}
             onSave={handleSave}
             onClose={handleClose}
+            championships={championships}
           />
         )}
 

@@ -19,7 +19,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Heisman', 'Media', 'Sync']
+const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Heisman', 'Media', 'Trophy', 'Sync']
 
 // ── Game status helper ─────────────────────────────────────────
 // A game is only "final" if it has real scores — not null, not 0-0
@@ -215,6 +215,7 @@ const ALL_NAV_ITEMS = [
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
   { id: 'Media',     icon: '📰', label: 'Media' },
+  { id: 'Trophy',    icon: '🏆', label: 'Trophies' },
   { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
@@ -3096,6 +3097,350 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
   )
 }
 
+// ── Trophy Room ────────────────────────────────────────────────
+function TrophyRoom({ championships = [], coaches = [], isMobile }) {
+  const userCoachNames = new Set((coaches || []).map(c => (c.name || '').toLowerCase().trim()))
+  const allChamps = [...championships]
+    .filter(ch => ch.championship_type === 'national' || !ch.championship_type)
+    .sort((a, b) => b.season - a.season)
+  const userWins = allChamps.filter(ch => userCoachNames.has((ch.coach_name || '').toLowerCase().trim()))
+  const cpuWins  = allChamps.filter(ch => !userCoachNames.has((ch.coach_name || '').toLowerCase().trim()))
+
+  // Hall-of-fame stats
+  const champCounts = {}
+  allChamps.forEach(ch => { const k = ch.team_name || '?'; champCounts[k] = (champCounts[k] || 0) + 1 })
+  const mostCrowns = Object.entries(champCounts).sort((a, b) => b[1] - a[1])[0]
+
+  const trophyRoomCSS = `
+    @keyframes trGoldShimmer {
+      0%   { background-position: -300% center; }
+      100% { background-position: 300% center; }
+    }
+    @keyframes trGlowPulse {
+      0%, 100% { box-shadow: 0 0 24px #c9a84c2a, 0 4px 40px #c9a84c0f, inset 0 1px 0 #c9a84c22; }
+      50%       { box-shadow: 0 0 40px #c9a84c44, 0 4px 60px #c9a84c1e, inset 0 1px 0 #c9a84c44; }
+    }
+    @keyframes trTrophyFloat {
+      0%, 100% { transform: translateY(0px) rotate(-2deg); }
+      50%       { transform: translateY(-8px) rotate(2deg); }
+    }
+    @keyframes trFadeSlideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes trSpotlightSweep {
+      0%   { opacity: 0.03; transform: translateX(-60%) skewX(-15deg); }
+      50%  { opacity: 0.07; }
+      100% { opacity: 0.03; transform: translateX(160%) skewX(-15deg); }
+    }
+    @keyframes trStarPop {
+      0%   { transform: scale(0) rotate(0deg); opacity: 0; }
+      60%  { transform: scale(1.2) rotate(180deg); opacity: 1; }
+      100% { transform: scale(1) rotate(360deg); opacity: 1; }
+    }
+    .tr-user-card {
+      animation: trFadeSlideUp 0.6s ease both, trGlowPulse 5s ease-in-out 0.6s infinite;
+    }
+    .tr-cpu-card {
+      animation: trFadeSlideUp 0.5s ease both;
+    }
+    .tr-shimmer-text {
+      background: linear-gradient(90deg, #c9a84c 0%, #f5d789 30%, #e8c060 50%, #f5d789 70%, #c9a84c 100%);
+      background-size: 300% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: trGoldShimmer 4s linear infinite;
+    }
+  `
+
+  const ChampCard = ({ ch, idx }) => {
+    const isUser = userCoachNames.has((ch.coach_name || '').toLowerCase().trim())
+    return (
+      <div
+        className={isUser ? 'tr-user-card' : 'tr-cpu-card'}
+        style={{
+          position: 'relative',
+          background: isUser
+            ? 'linear-gradient(145deg, #1a160b 0%, #211a0d 40%, #1a160b 100%)'
+            : 'linear-gradient(145deg, #111116 0%, #14141c 100%)',
+          border: `1px solid ${isUser ? '#c9a84c44' : '#1f1f2e'}`,
+          borderRadius: 16,
+          padding: isMobile ? '24px 18px' : '32px 36px',
+          overflow: 'hidden',
+          animationDelay: `${idx * 0.08}s`,
+        }}
+      >
+        {/* Animated spotlight sweep (user wins only) */}
+        {isUser && (
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            overflow: 'hidden', borderRadius: 16,
+          }}>
+            <div style={{
+              position: 'absolute', top: '-20%', left: 0, right: 0,
+              height: '140%', width: '60%',
+              background: 'linear-gradient(90deg, transparent, #c9a84c, transparent)',
+              animation: 'trSpotlightSweep 6s ease-in-out infinite',
+              animationDelay: `${idx * 1.2}s`,
+            }} />
+          </div>
+        )}
+
+        {/* Watermark year */}
+        <div style={{
+          position: 'absolute',
+          right: isMobile ? -8 : 16,
+          top: '50%', transform: 'translateY(-50%)',
+          fontFamily: "'Oswald', sans-serif",
+          fontSize: isMobile ? 90 : 130,
+          fontWeight: 700,
+          color: isUser ? '#c9a84c' : '#4444aa',
+          opacity: 0.07,
+          lineHeight: 1,
+          userSelect: 'none', pointerEvents: 'none',
+          letterSpacing: -4,
+        }}>S{ch.season}</div>
+
+        {/* Top label row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif",
+            fontSize: 10, letterSpacing: 4,
+            color: isUser ? '#c9a84c99' : '#55556688',
+            textTransform: 'uppercase',
+          }}>SEASON {ch.season} · NATIONAL CHAMPIONSHIP</div>
+          {isUser && (
+            <div style={{
+              background: 'linear-gradient(135deg, #c9a84c, #e8c060)',
+              color: '#000', fontFamily: "'Oswald', sans-serif",
+              fontSize: 8, letterSpacing: 2, textTransform: 'uppercase',
+              padding: '3px 10px', borderRadius: 3, fontWeight: 700,
+              flexShrink: 0,
+            }}>★ YOUR DYNASTY</div>
+          )}
+        </div>
+
+        {/* Main layout: winner + vs + loser */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: isMobile ? 14 : 28,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+        }}>
+
+          {/* WINNER */}
+          <div style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <TeamLogo team={ch.team_name} size={isMobile ? 48 : 60} />
+              <div>
+                <div
+                  className={isUser ? 'tr-shimmer-text' : ''}
+                  style={isUser ? {
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1,
+                  } : {
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: isMobile ? 22 : 28, fontWeight: 700,
+                    color: C.text, lineHeight: 1,
+                  }}
+                >{ch.team_name}</div>
+                {ch.coach_name && (
+                  <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Coach {ch.coach_name}</div>
+                )}
+                {ch.record && (
+                  <div style={{
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: 15,
+                    color: isUser ? C.accent : C.muted,
+                    marginTop: 3,
+                    letterSpacing: 0.5,
+                  }}>{ch.record}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* VS / Score divider */}
+          {ch.opponent_team && (
+            <div style={{
+              flexShrink: 0, textAlign: 'center',
+              padding: isMobile ? '4px 0' : '0 8px',
+            }}>
+              {ch.result ? (
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontSize: isMobile ? 20 : 26, fontWeight: 700,
+                  color: isUser ? C.accent : C.muted,
+                  letterSpacing: 1, lineHeight: 1,
+                  whiteSpace: 'nowrap',
+                }}>{ch.result}</div>
+              ) : null}
+              <div style={{
+                color: isUser ? '#c9a84c66' : '#44446688',
+                fontSize: 10, letterSpacing: 3,
+                textTransform: 'uppercase',
+                marginTop: ch.result ? 4 : 0,
+                fontFamily: "'Oswald', sans-serif",
+              }}>DEF.</div>
+            </div>
+          )}
+
+          {/* LOSER */}
+          {ch.opponent_team && (
+            <div style={{ flex: isMobile ? 'none' : 0.8, opacity: 0.55, minWidth: isMobile ? 0 : 150 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <TeamLogo team={ch.opponent_team} size={isMobile ? 32 : 40} />
+                <div>
+                  <div style={{
+                    fontFamily: "'Oswald', sans-serif",
+                    fontSize: isMobile ? 15 : 18,
+                    color: C.muted, lineHeight: 1,
+                  }}>{ch.opponent_team}</div>
+                  {ch.opponent_record && (
+                    <div style={{ color: C.muted, fontSize: 12, opacity: 0.8, marginTop: 2 }}>{ch.opponent_record}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom accent line (user wins only) */}
+        {isUser && (
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: 2,
+            background: 'linear-gradient(90deg, transparent, #c9a84c, transparent)',
+          }} />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ paddingBottom: isMobile ? 20 : 40 }}>
+      <style>{trophyRoomCSS}</style>
+
+      {/* ── Dramatic header ── */}
+      <div style={{ textAlign: 'center', marginBottom: isMobile ? 40 : 56, paddingTop: 8 }}>
+        <div style={{
+          fontSize: isMobile ? 56 : 72,
+          display: 'inline-block',
+          animation: 'trTrophyFloat 3.5s ease-in-out infinite',
+          marginBottom: 16,
+        }}>🏆</div>
+
+        <div style={{
+          fontFamily: "'Oswald', sans-serif",
+          fontSize: isMobile ? 26 : 40,
+          fontWeight: 700,
+          letterSpacing: isMobile ? 4 : 8,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}
+          className="tr-shimmer-text"
+        >TROPHY ROOM</div>
+
+        <div style={{ color: C.muted, fontSize: 12, letterSpacing: 3, textTransform: 'uppercase' }}>
+          {allChamps.length} National Championship{allChamps.length !== 1 ? 's' : ''}
+          {userWins.length > 0 && ` · ${userWins.length} User-Coached`}
+        </div>
+      </div>
+
+      {/* ── Empty state ── */}
+      {allChamps.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+          <div style={{ fontSize: 64, opacity: 0.15, marginBottom: 20 }}>🏟️</div>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 22,
+            color: C.muted, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 8,
+          }}>THE TROPHY CASE IS EMPTY</div>
+          <div style={{ color: C.muted, fontSize: 13 }}>
+            Import championship data to fill your trophy room.<br />
+            Sync a screenshot tagged as "championship" to get started.
+          </div>
+        </div>
+      )}
+
+      {/* ── Championship cards (user wins first, then CPU) ── */}
+      {allChamps.length > 0 && (
+        <div style={{ maxWidth: isMobile ? '100%' : 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: isMobile ? 20 : 32 }}>
+
+          {/* User-coached wins */}
+          {userWins.length > 0 && (
+            <>
+              {userWins.length < allChamps.length && (
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif", fontSize: 10,
+                  letterSpacing: 4, color: C.accent,
+                  textTransform: 'uppercase', paddingBottom: 4,
+                  borderBottom: `1px solid ${C.accent}22`,
+                }}>USER-COACHED CHAMPIONSHIPS</div>
+              )}
+              {userWins.map((ch, idx) => <ChampCard key={ch.id || ch.season} ch={ch} idx={idx} />)}
+            </>
+          )}
+
+          {/* CPU wins (if any) */}
+          {cpuWins.length > 0 && (
+            <>
+              <div style={{
+                fontFamily: "'Oswald', sans-serif", fontSize: 10,
+                letterSpacing: 4, color: C.muted,
+                textTransform: 'uppercase', paddingBottom: 4, marginTop: 8,
+                borderBottom: `1px solid ${C.border}`,
+              }}>CPU DYNASTIES</div>
+              {cpuWins.map((ch, idx) => <ChampCard key={ch.id || ch.season} ch={ch} idx={userWins.length + idx} />)}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Hall of Fame stats row ── */}
+      {allChamps.length > 0 && (
+        <div style={{
+          maxWidth: isMobile ? '100%' : 900, margin: `${isMobile ? 36 : 52}px auto 0`,
+          background: C.card, borderRadius: 12,
+          border: `1px solid ${C.border}`,
+          padding: isMobile ? '24px 20px' : '28px 36px',
+        }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 10,
+            letterSpacing: 4, color: C.muted, textTransform: 'uppercase',
+            marginBottom: 24,
+          }}>DYNASTY HALL OF FAME</div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+            gap: isMobile ? 20 : 28,
+          }}>
+            {[
+              { icon: '🏆', label: 'Total Titles', value: allChamps.length },
+              { icon: '🌟', label: 'User Titles', value: userWins.length },
+              { icon: '👑', label: 'Winningest Program', value: mostCrowns ? `${mostCrowns[0]}` : '—', sub: mostCrowns && mostCrowns[1] > 1 ? `${mostCrowns[1]}× champion` : null },
+              { icon: '🎖️', label: 'Reigning Champ', value: allChamps[0]?.team_name || '—', sub: allChamps[0] ? `Season ${allChamps[0].season}` : null },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 16 : 20,
+                  color: C.accent, fontWeight: 700, lineHeight: 1.2,
+                }}>{s.value}</div>
+                {s.sub && <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{s.sub}</div>}
+                <div style={{
+                  color: C.muted, fontSize: 9,
+                  textTransform: 'uppercase', letterSpacing: 1, marginTop: 4,
+                }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Root App ───────────────────────────────────────────────────
 export default function App() {
   const isMobile = useMobile()
@@ -3342,6 +3687,13 @@ export default function App() {
                     setCommPin(pin)
                     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '')
                   }}
+                />
+              )}
+              {tab === 'Trophy' && (
+                <TrophyRoom
+                  championships={data.championships || []}
+                  coaches={data.coaches || []}
+                  isMobile={isMobile}
                 />
               )}
               {tab === 'Sync' && (
