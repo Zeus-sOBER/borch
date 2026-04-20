@@ -198,7 +198,11 @@ export default async function handler(req, res) {
         ch.coach_name?.toLowerCase() === c.name?.toLowerCase()
       );
       const champStr = coachChamps.length > 0
-        ? `Championships: ${coachChamps.map(ch => `Season ${ch.season} ${ch.notes ? `(${ch.notes})` : ''} — ${ch.record || ''}`).join(', ')}`
+        ? `Championships (${coachChamps.length}): ` + coachChamps.map(ch => {
+            const parts = [`Season ${ch.season}`, ch.record || null];
+            if (ch.opponent_team) parts.push(`def. ${ch.opponent_team}${ch.opponent_record ? ` (${ch.opponent_record})` : ''} ${ch.result || ''}`);
+            return parts.filter(Boolean).join(', ');
+          }).join(' | ')
         : 'No championships yet';
 
       return [
@@ -235,9 +239,12 @@ export default async function handler(req, res) {
 
     // ── Championship history text ─────────────────────────────────────────
     const championshipHistory = (championships || []).length > 0
-      ? championships.map(ch =>
-          `Season ${ch.season}: ${ch.team_name} (Coach: ${ch.coach_name || 'unknown'}, Record: ${ch.record || 'unknown'})`
-        ).join('\n')
+      ? championships.map(ch => {
+          const parts = [`Season ${ch.season}: ${ch.team_name} (Coach: ${ch.coach_name || 'unknown'}, Record: ${ch.record || '?'})`];
+          if (ch.opponent_team) parts.push(`def. ${ch.opponent_team}${ch.opponent_record ? ` (${ch.opponent_record})` : ''}`);
+          if (ch.result) parts.push(ch.result);
+          return parts.join(' — ');
+        }).join('\n')
       : 'No championships recorded yet.';
 
     // ── Games formatted by type ───────────────────────────────────────────
@@ -411,6 +418,7 @@ FORMAT:
         const gameWeek = g.week ?? 'unknown'
         const gameLabel = g.game_type && g.game_type !== 'regular'
           ? ` [${g.game_type.replace(/_/g, ' ')}]` : ''
+        const gameNote = g.notes ? ` ⚑ ${g.notes}` : ''
 
         const seriesSummary = h2h.length === 0
           ? 'First meeting between these programs'
@@ -425,7 +433,7 @@ FORMAT:
         const homeRankedLabel = withRank(g.home_team);
         const awayRankedLabel = withRank(g.away_team);
         return [
-          `MATCHUP: Week ${gameWeek}${gameLabel} — ${homeRankedLabel} vs ${awayRankedLabel}`,
+          `MATCHUP: Week ${gameWeek}${gameLabel} — ${homeRankedLabel} vs ${awayRankedLabel}${gameNote}`,
           `  ${homeRankedLabel} (${homeTeam ? `${homeTeam.wins}-${homeTeam.losses}` : 'record unknown'}${homeCoach ? `, Coach ${homeCoach.name}` : ''}) · Recent form: ${recentForm(g.home_team)}`,
           `  ${awayRankedLabel} (${awayTeam ? `${awayTeam.wins}-${awayTeam.losses}` : 'record unknown'}${awayCoach ? `, Coach ${awayCoach.name}` : ''}) · Recent form: ${recentForm(g.away_team)}`,
           `  Series: ${seriesSummary}`,
@@ -522,11 +530,18 @@ ${weekContext.isChampionship ? '🏆 CHAMPIONSHIP WEEK — legacy on the line.' 
       const homeApRankNote = getApRank(homeTeam) ? `AP Rank: #${getApRank(homeTeam)}` : 'AP Rank: Unranked';
       const awayApRankNote = getApRank(awayTeam) ? `AP Rank: #${getApRank(awayTeam)}` : 'AP Rank: Unranked';
 
+      // Find this specific matchup's notes from scheduled games
+      const matchupGame = (scheduledGames || []).find(g =>
+        (g.home_team?.toLowerCase() === homeTeam.toLowerCase() && g.away_team?.toLowerCase() === awayTeam.toLowerCase()) ||
+        (g.home_team?.toLowerCase() === awayTeam.toLowerCase() && g.away_team?.toLowerCase() === homeTeam.toLowerCase())
+      );
+      const matchupNotes = matchupGame?.notes || null;
+
       userPrompt = `Write a Matchup Preview article for Week ${week || '?'} (${weekContext.phase}) of the Dynasty Universe season.
 
 MATCHUP:
 ${homeRanked} (Home) vs ${awayRanked} (Away)
-Week: ${week || 'unknown'} — ${weekContext.phase}
+Week: ${week || 'unknown'} — ${weekContext.phase}${matchupNotes ? `\nCommissioner note: "${matchupNotes}" — work this context into the article.` : ''}
 
 ${homeTeam.toUpperCase()} — coached by ${homeCoach?.name || 'unknown'}:
 ${homeApRankNote}

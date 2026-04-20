@@ -231,7 +231,8 @@ Return ONLY a JSON object (no markdown, no explanation):
       "is_final": true,
       "home_score": 70,
       "away_score": 3,
-      "game_type": "regular"
+      "game_type": "regular",
+      "notes": "Rivalry Game"
     },
     {
       "home_team": "Team Name",
@@ -240,7 +241,8 @@ Return ONLY a JSON object (no markdown, no explanation):
       "is_final": false,
       "home_score": null,
       "away_score": null,
-      "game_type": "regular"
+      "game_type": "regular",
+      "notes": null
     }
   ]
 }
@@ -250,7 +252,8 @@ Rules:
 - Week 14 = "conference_championship", weeks 15-18 = playoff/bowl
 - Include ALL game rows, not just human-team games
 - Week 0 is valid — keep it as week 0
-- Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3`;
+- Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3
+- "notes": copy any text from the Notes / Bowl Game Name column verbatim (e.g. "Rivalry Game", "Heated coaches rivalry", "Armed Forces Bowl"). Set to null if the cell is empty.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -606,7 +609,8 @@ async function saveToSupabase(data, coaches, humanTeams) {
         away_score: hasRealScores ? awayScore : null,
         week:       game.week ?? data.week ?? null,
         is_final:   isFinal,
-        game_type:  game.game_type ?? 'regular'
+        game_type:  game.game_type ?? 'regular',
+        notes:      game.notes     ?? null,
       }, { onConflict: 'home_team,away_team,week' });
       if (!error) saved.games++;
     }
