@@ -225,9 +225,10 @@ function BottomNav({ tab, setTab, commPin }) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
-      background: C.surface, borderTop: `1px solid ${C.border}`,
+      background: C.surface, borderTop: `2px solid ${C.border}`,
       display: 'flex', zIndex: 200,
       paddingBottom: 'env(safe-area-inset-bottom)',
+      boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
     }}>
       {navItems.map(item => {
         const isActive = item.href ? false : tab === item.id
@@ -236,19 +237,22 @@ function BottomNav({ tab, setTab, commPin }) {
             key={item.id}
             onClick={() => item.href ? (window.location.href = item.href) : setTab(item.id)}
             style={{
-              flex: 1, background: 'transparent', border: 'none',
-              padding: '8px 2px 6px', cursor: 'pointer',
+              flex: 1, background: isActive ? C.accent + '12' : 'transparent',
+              border: 'none',
+              padding: '10px 2px 8px', cursor: 'pointer',
               display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: 2,
+              alignItems: 'center', gap: 3,
               color: isActive ? C.accent : C.muted,
               borderTop: `2px solid ${isActive ? C.accent : 'transparent'}`,
-              transition: 'all 0.1s',
+              transition: 'all 0.15s',
+              minHeight: 58,
             }}
           >
-            <span style={{ fontSize: 18 }}>{item.icon}</span>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{item.icon}</span>
             <span style={{
-              fontSize: 8, fontFamily: "'Oswald', sans-serif",
+              fontSize: 9, fontFamily: "'Oswald', sans-serif",
               letterSpacing: 0.5, textTransform: 'uppercase',
+              fontWeight: isActive ? 700 : 400,
             }}>{item.label}</span>
           </button>
         )
@@ -2239,10 +2243,10 @@ function ArticleSlideUp({ article, onClose, isMobile }) {
       if (line.match(/^[-*] /)) return (
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, paddingLeft: 8 }}>
           <span style={{ color: C.accent, flexShrink: 0, marginTop: 2 }}>·</span>
-          <span style={{ color: C.muted, fontSize: 14, lineHeight: 1.75 }}>{formatInline(line.slice(2))}</span>
+          <span style={{ color: C.muted, fontSize: isMobile ? 15 : 14, lineHeight: 1.8 }}>{formatInline(line.slice(2))}</span>
         </div>
       )
-      return <p key={i} style={{ color: C.muted, fontSize: 14, lineHeight: 1.85, margin: '0 0 12px' }}>{formatInline(line)}</p>
+      return <p key={i} style={{ color: C.muted, fontSize: isMobile ? 15 : 14, lineHeight: 1.9, margin: '0 0 14px' }}>{formatInline(line)}</p>
     })
   }
 
@@ -3736,7 +3740,7 @@ export default function App() {
       {/* Main content */}
       <div style={{
         maxWidth: 1160, margin: '0 auto',
-        padding: isMobile ? '20px 12px 90px' : '36px 24px 40px',
+        padding: isMobile ? '16px 12px 110px' : '36px 24px 40px',
       }}>
         {loadingData
           ? (

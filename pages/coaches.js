@@ -36,6 +36,18 @@ const COACHING_STYLES = [
   'West Coast Offense', 'Power Run Game',
 ]
 
+// ── Mobile hook ────────────────────────────────────────────────
+function useMobile() {
+  const [m, setM] = useState(false)
+  useEffect(() => {
+    const check = () => setM(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+  return m
+}
+
 // ── Shared components ──────────────────────────────────────────
 function Badge({ children, color = C.accent }) {
   return (
@@ -362,7 +374,7 @@ function SeasonRecordEditor({ records = [], onChange }) {
 }
 
 // ── Coach detail / edit modal ──────────────────────────────────
-function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [] }) {
+function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [], isMobile = false }) {
   const coachChamps = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
   const [editing, setEditing]   = useState(false)
   const [saving,  setSaving]    = useState(false)
@@ -428,13 +440,22 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
   return (
     <div style={{
       position: 'fixed', inset: 0, background: '#000000cc',
-      zIndex: 200, display: 'flex', alignItems: 'flex-start',
-      justifyContent: 'center', padding: '40px 20px', overflowY: 'auto',
+      zIndex: 200, display: 'flex',
+      alignItems: isMobile ? 'flex-end' : 'flex-start',
+      justifyContent: 'center',
+      padding: isMobile ? 0 : '40px 20px',
+      overflowY: isMobile ? 'hidden' : 'auto',
     }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{
-        background: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 12, width: '100%', maxWidth: 700,
-        padding: 28, position: 'relative',
+        background: C.card,
+        border: isMobile ? 'none' : `1px solid ${C.border}`,
+        borderTop: `1px solid ${C.border}`,
+        borderRadius: isMobile ? '20px 20px 0 0' : 12,
+        width: '100%', maxWidth: isMobile ? '100%' : 700,
+        padding: isMobile ? '20px 16px 32px' : 28,
+        position: 'relative',
+        maxHeight: isMobile ? '92vh' : 'none',
+        overflowY: 'auto',
       }}>
         {/* Close */}
         <button onClick={() => onClose()} style={{
@@ -582,7 +603,7 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
         {/* Edit form */}
         {editing && (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
               <Input label="Coach Name" {...field('name')} />
               <div>
                 <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Current Team</label>
@@ -620,7 +641,7 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
             </div>
 
             {/* Mascot + Team Color */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 4 }}>
               <div>
                 <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Mascot Emoji</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -698,6 +719,7 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
 
 // ── Add coach form ─────────────────────────────────────────────
 function AddCoachForm({ pin, teams = [], onAdd, onClose }) {
+  const isMobile = useMobile()
   const [form, setForm]   = useState({ name: '', team: '', team_id: null, username: '', coaching_style: '', alma_mater: '', bio: '', hire_date: '', is_active: true, is_commissioner: false, overall_wins: 0, overall_losses: 0, seasons_coached: 1, achievements: [], season_records: [] })
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
@@ -724,11 +746,11 @@ function AddCoachForm({ pin, teams = [], onAdd, onClose }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 20 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, width: '100%', maxWidth: 560, padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ background: C.card, border: isMobile ? 'none' : `1px solid ${C.border}`, borderTop: `1px solid ${C.border}`, borderRadius: isMobile ? '20px 20px 0 0' : 12, width: '100%', maxWidth: isMobile ? '100%' : 560, padding: isMobile ? '20px 16px 32px' : 28, maxHeight: isMobile ? '92vh' : '90vh', overflowY: 'auto' }}>
         <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: C.text, marginBottom: 20, letterSpacing: 1 }}>ADD NEW COACH</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
           <Input label="Coach Name *" {...field('name')} />
           <div>
             <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Team</label>
@@ -810,6 +832,7 @@ function PinGate({ onUnlock }) {
 
 // ── Main page ──────────────────────────────────────────────────
 export default function CoachesPage() {
+  const isMobile = useMobile()
   const [coaches,     setCoaches]     = useState([])
   const [teams,       setTeams]       = useState([])   // all teams from DB
   const [loading,     setLoading]     = useState(true)
@@ -882,36 +905,36 @@ export default function CoachesPage() {
       <style>{`* { box-sizing:border-box; } body { margin:0; background:${C.bg}; font-family:'Lato',sans-serif; color:${C.text}; } ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:${C.surface};} ::-webkit-scrollbar-thumb{background:${C.subtle};border-radius:3px;}`}</style>
 
       {/* Nav */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '0 24px' }}>
-        <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 20 }}>
-          <a href="/" style={{ textDecoration: 'none', padding: '16px 0', borderRight: `1px solid ${C.border}`, paddingRight: 20, marginRight: 4 }}>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, fontWeight: 700, letterSpacing: 2, color: C.accent, lineHeight: 1 }}>DYNASTY</div>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: isMobile ? '0 14px' : '0 24px' }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 20 }}>
+          <a href="/" style={{ textDecoration: 'none', padding: '14px 0', borderRight: `1px solid ${C.border}`, paddingRight: isMobile ? 12 : 20, marginRight: 4 }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 16 : 18, fontWeight: 700, letterSpacing: 2, color: C.accent, lineHeight: 1 }}>DYNASTY</div>
             <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 5, color: C.muted }}>UNIVERSE</div>
           </a>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.muted, letterSpacing: 1 }}>← BACK TO MAIN HUB</div>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 11 : 14, color: C.muted, letterSpacing: 1 }}>← BACK</div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
             {commPin
-              ? <Badge color={C.green}>🔓 Commissioner Mode</Badge>
-              : <button onClick={() => setShowPinGate(true)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 14px', color: C.muted, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}>🔐 Commissioner Login</button>
+              ? <Badge color={C.green}>🔓 {isMobile ? 'Comm' : 'Commissioner Mode'}</Badge>
+              : <button onClick={() => setShowPinGate(true)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1 }}>🔐 {isMobile ? 'Login' : 'Commissioner Login'}</button>
             }
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1160, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '32px 24px' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: 1, textTransform: 'uppercase' }}>Coaches</h1>
-            <p style={{ color: C.muted, margin: '4px 0 0', fontSize: 13 }}>User coach profiles, records, and dynasty history</p>
+            <h1 style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: 1, textTransform: 'uppercase' }}>Coaches</h1>
+            {!isMobile && <p style={{ color: C.muted, margin: '4px 0 0', fontSize: 13 }}>User coach profiles, records, and dynasty history</p>}
           </div>
-          {commPin && <Btn onClick={() => setShowAdd(true)}>+ Add Coach</Btn>}
+          {commPin && <Btn small={isMobile} onClick={() => setShowAdd(true)}>+ Add Coach</Btn>}
         </div>
 
         {/* Summary stats */}
         {coaches.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`, gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 28 }}>
             {[
               { label: 'Active Coaches', value: active.length, icon: '👤' },
               { label: 'Total Games', value: totalGames, icon: '🏈' },
@@ -950,7 +973,7 @@ export default function CoachesPage() {
               </Card>
             )
             : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: isMobile ? 10 : 16 }}>
                 {shown.map(c => (
                   <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} />
                 ))}
@@ -976,6 +999,7 @@ export default function CoachesPage() {
             onSave={handleSave}
             onClose={handleClose}
             championships={championships}
+            isMobile={isMobile}
           />
         )}
 
