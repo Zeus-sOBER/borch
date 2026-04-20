@@ -268,23 +268,33 @@ Rules:
 async function parseScheduleImage(base64, mimeType, coaches, humanTeams) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
 
-  const prompt = `You are reading a screenshot of a college football dynasty schedule screen.
+  const prompt = `You are reading a screenshot of the EA Sports CFB26 dynasty schedule screen.
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
 
-Extract all visible matchups from this schedule screen. These are UPCOMING games.
-Only extract matchups that do NOT have final scores yet.
+HOME vs AWAY RULE (critical):
+In this game's UI, matchups are displayed as "Team A  at  Team B".
+This means Team A is the AWAY team and Team B is the HOME team.
+Always assign: away_team = the team listed BEFORE "at", home_team = the team listed AFTER "at".
+
+TEAM NAME CLEANUP:
+- Strip rankings/numbers before team names (e.g. "21 Texas Tech" → "Texas Tech", "2 Miami University" → "Miami (OH)")
+- "Miami University" = "Miami (OH)"
+- Use clean, standard team names without any rank prefix
+
+Extract all visible matchups from this schedule screen.
+Read the week number from the top of the screen (e.g. "WEEK 6").
 
 Return ONLY a JSON object (no markdown, no explanation):
 {
   "type": "schedule",
-  "summary": "Imported schedule from screenshot: N games across N weeks",
+  "summary": "Imported schedule from screenshot: N games, Week W",
   "games": [
     {
       "home_team": "Team Name",
       "away_team": "Team Name",
-      "week": 1,
+      "week": 6,
       "is_final": false,
       "home_score": null,
       "away_score": null,
@@ -294,9 +304,11 @@ Return ONLY a JSON object (no markdown, no explanation):
 }
 
 Rules:
-- Set "is_final": false for ALL games
+- Set "is_final": false for ALL games (these are upcoming matchups)
 - Set "home_score": null and "away_score": null
-- Determine "game_type" from context (conference title game, bowl name, etc.)`;
+- Use the week number shown on screen for every game
+- "game_type": use "regular" unless context clearly indicates conference_championship, bowl, cfp_quarterfinal, cfp_semifinal, or national_championship
+- Only include games that are fully visible — skip any cut-off rows at the bottom`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -461,7 +473,10 @@ RANKINGS INSTRUCTIONS (type = "rankings" or "ap_poll"):
 - Leave "games", "standings", "players" empty for a pure rankings screenshot
 - Example ap_poll entry: { "rank": 1, "team_name": "Alabama", "record": "5-0", "points": 1550 }
 
-For "championship": { "team_name": "", "coach_name": "", "record": "", "season": 0, "championship_type": "national|conference|bowl" }
+For "championship": { "team_name": "", "coach_name": "", "record": "", "opponent_team": "", "opponent_record": "", "result": "56-29", "season": 0, "championship_type": "national|conference|bowl" }
+- result = final score of the championship game (winning score first, e.g. "56-29")
+- opponent_team = the losing team in the championship game
+- opponent_record = the losing team's season record
 For "playoff_bracket": { "teams": [], "round": "" }
 Only include arrays that have actual extracted data.`;
 
@@ -685,13 +700,18 @@ async function saveToSupabase(data, coaches, humanTeams) {
   if (data.championship) {
     const champ = data.championship;
     const coachName = champ.coach_name || findCoach(champ.team_name);
+    const champType = champ.championship_type || 'national';
     const { error } = await supabase.from('championships').upsert({
-      season: champ.season ?? new Date().getFullYear(),
-      team_name: champ.team_name,
-      coach_name: coachName,
-      record: champ.record ?? null,
-      notes: champ.championship_type ?? null
-    }, { onConflict: 'season,team_name' });
+      season:            champ.season ?? new Date().getFullYear(),
+      team_name:         champ.team_name,
+      coach_name:        coachName,
+      record:            champ.record            ?? null,
+      opponent_team:     champ.opponent_team      ?? null,
+      opponent_record:   champ.opponent_record    ?? null,
+      result:            champ.result             ?? null,
+      championship_type: champType,
+      notes:             champ.notes             ?? null,
+    }, { onConflict: 'season,championship_type' });
     if (!error) saved.championship = true;
   }
 

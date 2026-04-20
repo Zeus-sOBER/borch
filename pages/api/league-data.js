@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   const season = req.query.season || 1
 
-  const [teamsRes, gamesRes, playersRes, logRes, coachesRes, settingsRes, heismanRes] = await Promise.all([
+  const [teamsRes, gamesRes, playersRes, logRes, coachesRes, settingsRes, heismanRes, champsRes] = await Promise.all([
     supabase.from('teams').select('*').order('wins', { ascending: false }),
     supabase.from('games').select('*').order('week', { ascending: true }),
     supabase.from('players').select('*'),
@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     supabase.from('coaches').select('name, team, team_id, coaching_style, overall_wins, overall_losses').eq('is_active', true),
     supabase.from('league_settings').select('*').eq('id', 1).single(),
     supabase.from('heisman_watch').select('*').order('rank', { ascending: true }).limit(5),
+    supabase.from('championships').select('*').eq('championship_type', 'national').order('season', { ascending: false }),
   ])
 
   const coaches  = coachesRes.data  || []
@@ -54,8 +55,9 @@ export default async function handler(req, res) {
     teams,
     games,
     players,
-    scanLog:          logRes.data     || [],
+    scanLog:           logRes.data    || [],
     settings,
     heismanCandidates: heismanRes.data || [],
+    championships:     champsRes.data  || [],
   })
 }

@@ -250,9 +250,31 @@ function BottomNav({ tab, setTab, commPin }) {
 }
 
 // ── Score Ticker ────────────────────────────────────────────────
-function ScoreTicker({ games, setTab, isMobile }) {
-  const finalGames = [...games].filter(gameIsFinal).reverse().slice(0, 14)
-  if (finalGames.length === 0) return null
+function ScoreTicker({ games, setTab, isMobile, settings }) {
+  const currentWeek = settings?.current_week ?? 0
+
+  // Prefer showing the current week's games (finals or upcoming).
+  // If no games exist for the current week yet, fall back to recent finals.
+  const weekGames    = games.filter(g => g.week === currentWeek && g.home_team && g.away_team)
+  const weekFinals   = weekGames.filter(gameIsFinal)
+  const weekUpcoming = weekGames.filter(g => !gameIsFinal(g))
+
+  let displayGames, mode
+  if (weekGames.length > 0) {
+    // Show finals first, then upcoming for the current week
+    displayGames = [...weekFinals, ...weekUpcoming]
+    mode = weekFinals.length > 0 && weekUpcoming.length === 0 ? 'scores' : 'upcoming'
+  } else {
+    // No games for current week yet — show most recent finals across all weeks
+    displayGames = [...games].filter(gameIsFinal).reverse().slice(0, 14)
+    mode = 'scores'
+  }
+
+  if (displayGames.length === 0) return null
+
+  const label = mode === 'upcoming' ? `WK ${currentWeek} UPCOMING` : 'SCORES'
+  const labelBg = mode === 'upcoming' ? '#1a4fd6' : C.accent
+  const labelColor = mode === 'upcoming' ? '#fff' : '#000'
 
   return (
     <div style={{
@@ -266,18 +288,19 @@ function ScoreTicker({ games, setTab, isMobile }) {
         WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none', msOverflowStyle: 'none',
       }}>
-        {/* "SCORES" label */}
+        {/* Label pill */}
         <div style={{
           flexShrink: 0, padding: isMobile ? '7px 12px' : '8px 16px',
-          background: C.accent,
+          background: labelBg,
           display: 'flex', alignItems: 'center',
           fontFamily: "'Oswald', sans-serif",
-          fontSize: 10, fontWeight: 700, letterSpacing: 2.5, color: '#000',
+          fontSize: 10, fontWeight: 700, letterSpacing: 2.5, color: labelColor,
           textTransform: 'uppercase', whiteSpace: 'nowrap',
-        }}>SCORES</div>
+        }}>{label}</div>
 
-        {finalGames.map((g, i) => {
-          const homeWon = g.home_score > g.away_score
+        {displayGames.map((g, i) => {
+          const isFinal = gameIsFinal(g)
+          const homeWon = isFinal && g.home_score > g.away_score
           return (
             <div
               key={g.id || i}
@@ -295,18 +318,26 @@ function ScoreTicker({ games, setTab, isMobile }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', maxWidth: 85 }}>
                   <TeamLogo team={g.home_team} size={16} />
-                  <span style={{ color: homeWon ? C.text : C.muted, fontSize: 11, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.home_team}</span>
+                  <span style={{ color: isFinal ? (homeWon ? C.text : C.muted) : C.text, fontSize: 11, fontWeight: homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.home_team}</span>
                 </div>
-                <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.home_score}</span>
+                {isFinal
+                  ? <span style={{ fontFamily: "'Oswald', sans-serif", color: homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.home_score}</span>
+                  : <span style={{ fontFamily: "'Oswald', sans-serif", color: '#1a4fd6', fontSize: 9, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>HOME</span>
+                }
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', maxWidth: 85 }}>
                   <TeamLogo team={g.away_team} size={16} />
-                  <span style={{ color: !homeWon ? C.text : C.muted, fontSize: 11, fontWeight: !homeWon ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.away_team}</span>
+                  <span style={{ color: isFinal ? (!homeWon ? C.text : C.muted) : C.text, fontSize: 11, fontWeight: !homeWon && isFinal ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.away_team}</span>
                 </div>
-                <span style={{ fontFamily: "'Oswald', sans-serif", color: !homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.away_score}</span>
+                {isFinal
+                  ? <span style={{ fontFamily: "'Oswald', sans-serif", color: !homeWon ? C.accent : C.muted, fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{g.away_score}</span>
+                  : <span style={{ fontFamily: "'Oswald', sans-serif", color: C.muted, fontSize: 9, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>AWAY</span>
+                }
               </div>
-              <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', fontFamily: "'Oswald', sans-serif" }}>WK {g.week} · FINAL</div>
+              <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', fontFamily: "'Oswald', sans-serif" }}>
+                WK {g.week} · {isFinal ? 'FINAL' : 'SCHEDULED'}
+              </div>
             </div>
           )
         })}
@@ -354,7 +385,7 @@ function ApRankBadge({ rank, style = {} }) {
   )
 }
 
-function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen, heismanCandidates = [] }) {
+function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries, settings, setTab, articles = [], onArticlesChange, commPin, onArticleOpen, heismanCandidates = [], championships = [] }) {
   const finalGames  = games.filter(gameIsFinal)
   const currentWeek = settings?.current_week ?? 0
 
@@ -976,6 +1007,72 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           </div>
         )
       })()}
+
+      {/* DYNASTY CHAMPIONS */}
+      {championships.length > 0 && (
+        <div>
+          <SectionLabel color='#b8960c'>🏆 Dynasty Champions</SectionLabel>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Header row */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '60px 1fr 1fr' : '60px 1fr 1fr 90px 90px',
+              padding: '7px 16px', borderBottom: `1px solid ${C.border}`,
+              background: C.surface,
+            }}>
+              {['YEAR', 'CHAMPION', 'OPPONENT', ...(isMobile ? [] : ['RECORD', 'RESULT'])].map(h => (
+                <span key={h} style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>{h}</span>
+              ))}
+            </div>
+            {championships.map((c, i) => {
+              // Highlight user-coached wins
+              const userCoaches = ['Rusty Grimm','Justin Woljevach','Jordan Herzy','Jesus Laris','Adam Dock','Lane Botkin','James Malone','Ryan Madison','Andrew Grimm','Anthony Ramos','Cody Zwernemann']
+              const isDynastyWin = userCoaches.some(n => n.toLowerCase() === (c.coach_name || '').toLowerCase())
+              return (
+                <div key={c.id || i} style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '60px 1fr 1fr' : '60px 1fr 1fr 90px 90px',
+                  padding: '10px 16px',
+                  borderBottom: i < championships.length - 1 ? `1px solid ${C.border}` : 'none',
+                  background: isDynastyWin ? 'rgba(184,150,12,0.06)' : 'transparent',
+                  alignItems: 'center',
+                }}>
+                  {/* Year */}
+                  <div>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 15, color: isDynastyWin ? '#b8960c' : C.muted, fontWeight: 700 }}>{c.season}</span>
+                  </div>
+                  {/* Champion */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <TeamLogo team={c.team_name} size={20} />
+                    <div>
+                      <div style={{ color: C.text, fontSize: 13, fontWeight: isDynastyWin ? 700 : 400 }}>{c.team_name}</div>
+                      {c.coach_name && <div style={{ color: isDynastyWin ? '#b8960c' : C.muted, fontSize: 10 }}>{c.coach_name}{c.record ? ` · ${c.record}` : ''}</div>}
+                    </div>
+                  </div>
+                  {/* Opponent */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {c.opponent_team && <TeamLogo team={c.opponent_team} size={16} />}
+                    <div>
+                      <div style={{ color: C.muted, fontSize: 12 }}>{c.opponent_team || '—'}</div>
+                      {!isMobile && c.opponent_record && <div style={{ color: C.subtle, fontSize: 10 }}>{c.opponent_record}</div>}
+                    </div>
+                  </div>
+                  {/* Record (desktop) */}
+                  {!isMobile && (
+                    <div style={{ color: C.muted, fontSize: 12 }}>{c.record || '—'}</div>
+                  )}
+                  {/* Result (desktop) */}
+                  {!isMobile && (
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: isDynastyWin ? C.accent : C.muted, fontWeight: isDynastyWin ? 700 : 400 }}>
+                      {c.result || '—'}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </Card>
+        </div>
+      )}
 
       {/* RECENT SYNCS */}
       {scanLog?.length > 0 && (
@@ -2996,7 +3093,7 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
 export default function App() {
   const isMobile = useMobile()
   const [tab, setTab]                   = useState('Dashboard')
-  const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 }, heismanCandidates: [] })
+  const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 }, heismanCandidates: [], championships: [] })
   const [loadingData, setLoadingData]   = useState(true)
   const [commPin, setCommPin]           = useState(null)
   const [showCommLogin, setShowCommLogin] = useState(false)
@@ -3208,7 +3305,7 @@ export default function App() {
 
       {/* Score Ticker — only on the home tab */}
       {!loadingData && tab === 'Dashboard' && (
-        <ScoreTicker games={data.games} setTab={setTab} isMobile={isMobile} />
+        <ScoreTicker games={data.games} setTab={setTab} isMobile={isMobile} settings={data.settings} />
       )}
 
       {/* Main content */}
