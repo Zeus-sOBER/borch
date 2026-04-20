@@ -253,7 +253,12 @@ Rules:
 - Include ALL game rows, not just human-team games
 - Week 0 is valid — keep it as week 0
 - Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3
-- "notes": copy any text from the Notes / Bowl Game Name column verbatim (e.g. "Rivalry Game", "Heated coaches rivalry", "Armed Forces Bowl"). Set to null if the cell is empty.`;
+- "notes": copy any text from the Notes / Bowl Game Name column verbatim (e.g. "Rivalry Game", "Heated coaches rivalry", "Armed Forces Bowl"). Set to null if the cell is empty.
+TEAM NAME RULES (apply consistently):
+- "University of Miami" = "Miami"   (always use just "Miami" for the Florida school)
+- "Miami University" = "Miami (OH)" (this is the Ohio school)
+- "Miami FL", "Miami (FL)", "U of Miami" = "Miami"
+- Use clean standard names — no "University of X" prefix forms`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -282,8 +287,10 @@ This means Team A is the AWAY team and Team B is the HOME team.
 Always assign: away_team = the team listed BEFORE "at", home_team = the team listed AFTER "at".
 
 TEAM NAME CLEANUP:
-- Strip rankings/numbers before team names (e.g. "21 Texas Tech" → "Texas Tech", "2 Miami University" → "Miami (OH)")
-- "Miami University" = "Miami (OH)"
+- Strip rankings/numbers before team names (e.g. "21 Texas Tech" → "Texas Tech", "2 Ohio State" → "Ohio State")
+- "Miami University" = "Miami (OH)"  (Miami of Ohio — the Ohio school)
+- "University of Miami" = "Miami"    (the Florida school — always just "Miami")
+- Any variant of Miami Florida (e.g. "Miami FL", "Miami (FL)", "U of Miami") = "Miami"
 - Use clean, standard team names without any rank prefix
 
 Extract all visible matchups from this schedule screen.
@@ -623,6 +630,46 @@ async function syncCoachRecordsFromTeams(records) {
 }
 
 // ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
+// ─── Team name normalizer ─────────────────────────────────────────────────────
+// Maps alternate spellings → canonical name used consistently in the DB.
+// Applied before every upsert so the same game can't be stored twice under
+// different name variants (e.g. "University of Miami" vs "Miami" vs "Miami (FL)").
+const TEAM_NAME_ALIASES = {
+  'university of miami': 'Miami',
+  'miami fl': 'Miami',
+  'miami (fl)': 'Miami',
+  'miami florida': 'Miami',
+  'miami, florida': 'Miami',
+  'u of miami': 'Miami',
+  'miami university': 'Miami (OH)',
+  'miami ohio': 'Miami (OH)',
+  'miami, ohio': 'Miami (OH)',
+  'miami oh': 'Miami (OH)',
+  'ole miss': 'Mississippi',
+  'usc': 'Southern California',
+  'university of southern california': 'Southern California',
+  'unc': 'North Carolina',
+  'penn st': 'Penn State',
+  'penn st.': 'Penn State',
+  'ohio st': 'Ohio State',
+  'ohio st.': 'Ohio State',
+  'michigan st': 'Michigan State',
+  'michigan st.': 'Michigan State',
+  'fsu': 'Florida State',
+  'lsu': 'LSU',
+  'tcu': 'TCU',
+  'smu': 'SMU',
+  'ucf': 'UCF',
+  'utsa': 'UTSA',
+  'byu': 'BYU',
+};
+
+function normalizeTeamName(name) {
+  if (!name) return name;
+  const key = name.toLowerCase().trim();
+  return TEAM_NAME_ALIASES[key] ?? name;
+}
+
 async function saveToSupabase(data, coaches, humanTeams) {
   const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0, heisman: 0 };
 
@@ -649,9 +696,11 @@ async function saveToSupabase(data, coaches, humanTeams) {
       const isFinal = rawFinal && hasRealScores;
 
       if (isFinal) hasFinalGames = true;
+      const homeTeam = normalizeTeamName(game.home_team);
+      const awayTeam = normalizeTeamName(game.away_team);
       const { error } = await supabase.from('games').upsert({
-        home_team:  game.home_team,
-        away_team:  game.away_team,
+        home_team:  homeTeam,
+        away_team:  awayTeam,
         home_score: hasRealScores ? homeScore : null,
         away_score: hasRealScores ? awayScore : null,
         week:       game.week ?? data.week ?? null,
