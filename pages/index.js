@@ -1909,6 +1909,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   const [showGenerator,   setShowGenerator]   = useState(false)
   const [genType,         setGenType]         = useState('power-rankings')
   const [genWeek,         setGenWeek]         = useState('')
+  const [genCustomPrompt, setGenCustomPrompt] = useState('')
   const [isGenerating,    setIsGenerating]    = useState(false)
   const [genError,        setGenError]        = useState('')
   const [filterType,      setFilterType]      = useState('all')
@@ -1919,6 +1920,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
     { id: 'league-preview',    label: 'League Preview',    icon: '📅' },
     { id: 'player-spotlight',  label: 'Player Spotlight',  icon: '⭐' },
     { id: 'rivalry-breakdown', label: 'Rivalry Breakdown', icon: '🔥' },
+    { id: 'custom',            label: 'Custom',            icon: '✍️' },
   ]
 
   const loadHistory = useCallback(async () => {
@@ -1944,11 +1946,19 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
   }
 
   const generate = async () => {
+    if (genType === 'custom' && !genCustomPrompt.trim()) {
+      setGenError('Please describe what you want the article to cover.'); return
+    }
     setIsGenerating(true); setGenError('')
     try {
       const res  = await fetch('/api/generate-article', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleType: genType, week: genWeek || undefined, pin: commPin }),
+        body: JSON.stringify({
+          articleType:  genType,
+          week:         genWeek || undefined,
+          pin:          commPin,
+          customPrompt: genType === 'custom' ? genCustomPrompt : undefined,
+        }),
       })
       const data = await res.json()
       if (data.error) { setGenError(data.error); return }
@@ -2012,7 +2022,7 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
 
       {/* ── Filter tabs ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-        {['all', ...TYPES.map(t => t.id)].map(id => {
+        {['all', ...TYPES.filter(t => t.id !== 'custom').map(t => t.id), 'custom'].map(id => {
           const meta = id === 'all' ? { icon: '📚', label: 'All' } : TYPES.find(t => t.id === id)
           const active = filterType === id
           return (
@@ -2143,6 +2153,34 @@ function MediaCenter({ teams, games, players, commPin, onPinSet, isMobile }) {
                   }}>{t.icon} {t.label}</button>
                 ))}
               </div>
+              {/* Custom prompt textarea — only shown when Custom type is selected */}
+              {genType === 'custom' && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
+                    YOUR INSTRUCTIONS
+                  </div>
+                  <textarea
+                    value={genCustomPrompt}
+                    onChange={e => setGenCustomPrompt(e.target.value)}
+                    placeholder={`Describe exactly what you want written. Be as specific as you like.\n\nExamples:\n• "Write a feature on the three biggest rivalries forming this season. Use a hype, trash-talk-heavy tone — something the group chat will go crazy over."\n• "Write a mid-season report card grading every coach A through F based on their records and expectations. Be brutally honest."\n• "Write an awards column — best offense, best defense, most improved, biggest flop so far."`}
+                    rows={7}
+                    style={{
+                      width: '100%', background: C.bg,
+                      border: `1px solid ${C.accent}55`, borderRadius: 6,
+                      padding: '12px 14px', color: C.text, fontSize: 13,
+                      lineHeight: 1.6, fontFamily: "'Lato', sans-serif",
+                      resize: 'vertical', boxSizing: 'border-box',
+                      outline: 'none',
+                    }}
+                    onFocus={e => e.target.style.borderColor = C.accent}
+                    onBlur={e => e.target.style.borderColor = C.accent + '55'}
+                  />
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
+                    All real league data (coaches, records, scores, standings, championship history) is automatically included. Only write about things that have actually happened in the dynasty.
+                  </div>
+                </div>
+              )}
+
               <input type="number" placeholder="Week # (optional)" value={genWeek} onChange={e => setGenWeek(e.target.value)}
                 style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 13, width: 160, marginBottom: 14 }}
               />

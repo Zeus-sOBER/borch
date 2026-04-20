@@ -74,7 +74,7 @@ function getCFBWeekContext(week) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { articleType, week, pin, homeTeam, awayTeam } = req.body;
+  const { articleType, week, pin, homeTeam, awayTeam, customPrompt } = req.body;
 
   if (!pin || pin !== process.env.COMMISSIONER_PIN) {
     return res.status(401).json({ error: 'Commissioner PIN required to generate articles.' });
@@ -613,6 +613,40 @@ FORMAT:
 ${weekContext.isPlayoff ? '⚡ If these coaches could meet in the playoffs, make that the central tension.' : ''}`;
     }
 
+    if (articleType === 'custom') {
+      if (!customPrompt?.trim()) {
+        return res.status(400).json({ error: 'Custom articles require a prompt describing what to write.' });
+      }
+      userPrompt = `Write a custom Dynasty Universe article following the commissioner's instructions below.
+
+COMMISSIONER'S INSTRUCTIONS:
+${customPrompt.trim()}
+
+─────────────────────────────
+CURRENT LEAGUE DATA (use this — do not invent anything not listed here):
+
+STANDINGS:
+${standingsSummary}
+
+RECENT GAME RESULTS:
+${allGamesSummary}
+
+TOP PLAYERS:
+${playersSummary}
+
+CHAMPIONSHIP HISTORY:
+${championshipHistory}
+─────────────────────────────
+
+REQUIREMENTS:
+- Follow the commissioner's instructions above as your primary guide
+- Every stat, score, and result you reference must appear in the data above — do not fabricate
+- Reference specific coaches by name; they are the personalities of this league
+- Match the stylistic choices and tone requested in the instructions
+- If the instructions ask for something that hasn't happened yet or isn't in the data, note that honestly rather than making it up
+- Maintain Dynasty Universe's voice: ESPN-professional with personality and stakes`;
+    }
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1800,
@@ -627,8 +661,11 @@ ${weekContext.isPlayoff ? '⚡ If these coaches could meet in the playoffs, make
       ? `Matchup Preview: ${homeTeam} vs ${awayTeam}${week ? ` — Week ${week}` : ''}`
       : articleType === 'league-preview'
         ? `League Preview${week ? ` — Week ${week}` : ''} (${weekContext.phase})`
-        : articleType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) +
-          (week ? ` — Week ${week} (${weekContext.phase})` : '');
+        : articleType === 'custom'
+          ? (customPrompt?.trim().split('\n')[0]?.slice(0, 80) || 'Custom Article') +
+            (week ? ` — Week ${week}` : '')
+          : articleType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) +
+            (week ? ` — Week ${week} (${weekContext.phase})` : '');
 
     await supabase.from('articles').insert({
       article_type: articleType,
