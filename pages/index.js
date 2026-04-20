@@ -19,7 +19,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Heisman', 'Media', 'Trophy', 'Sync']
+const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Awards', 'Media', 'Sync']
 
 // ── Game status helper ─────────────────────────────────────────
 // A game is only "final" if it has real scores — not null, not 0-0
@@ -215,7 +215,7 @@ const ALL_NAV_ITEMS = [
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
   { id: 'Media',     icon: '📰', label: 'Media' },
-  { id: 'Trophy',    icon: '🏆', label: 'Trophies' },
+  { id: 'Awards',    icon: '🏆', label: 'Awards' },
   { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
@@ -3097,6 +3097,41 @@ function MatchupsTab({ games, teams, settings, articles, isMobile, onArticleOpen
   )
 }
 
+// ── Awards Tab (Heisman + Trophy Room combined) ────────────────
+function AwardsTab({ heismanCandidates = [], onRefresh, championships = [], coaches = [], isMobile }) {
+  const [subTab, setSubTab] = useState('heisman')
+  return (
+    <div>
+      {/* Sub-tab pill selector */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+        {[
+          { id: 'heisman', label: '🏆 Heisman Watch' },
+          { id: 'trophy',  label: '🎖️ Trophy Room'   },
+        ].map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSubTab(s.id)}
+            style={{
+              background: subTab === s.id ? C.accent : C.card,
+              color:      subTab === s.id ? '#000'   : C.muted,
+              border:     `1px solid ${subTab === s.id ? C.accent : C.border}`,
+              borderRadius: 6, padding: '10px 20px', cursor: 'pointer',
+              fontFamily: "'Oswald', sans-serif", fontSize: 13,
+              letterSpacing: 0.5, transition: 'all 0.15s', minHeight: 40,
+            }}
+          >{s.label}</button>
+        ))}
+      </div>
+      {subTab === 'heisman' && (
+        <HeismanTab heismanCandidates={heismanCandidates} onRefresh={onRefresh} isMobile={isMobile} />
+      )}
+      {subTab === 'trophy' && (
+        <TrophyRoom championships={championships} coaches={coaches} isMobile={isMobile} />
+      )}
+    </div>
+  )
+}
+
 // ── Trophy Room ────────────────────────────────────────────────
 function TrophyRoom({ championships = [], coaches = [], isMobile }) {
   const userCoachNames = new Set((coaches || []).map(c => (c.name || '').toLowerCase().trim()))
@@ -3607,7 +3642,7 @@ export default function App() {
             {!isMobile && (
               <>
                 <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
-                <button onClick={() => setTab('Heisman')} style={{ background: 'none', border: 'none', color: tab === 'Heisman' ? C.accent : C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 HEISMAN</button>
+                <button onClick={() => setTab('Awards')} style={{ background: 'none', border: 'none', color: tab === 'Awards' ? C.accent : C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 AWARDS</button>
                 <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
               </>
             )}
@@ -3678,7 +3713,15 @@ export default function App() {
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
               {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
-              {tab === 'Heisman'   && <HeismanTab heismanCandidates={data.heismanCandidates || []} onRefresh={fetchData} isMobile={isMobile} />}
+              {tab === 'Awards'    && (
+                <AwardsTab
+                  heismanCandidates={data.heismanCandidates || []}
+                  onRefresh={fetchData}
+                  championships={data.championships || []}
+                  coaches={data.coaches || []}
+                  isMobile={isMobile}
+                />
+              )}
               {tab === 'Media'     && (
                 <MediaCenter
                   teams={data.teams} games={data.games} players={data.players}
@@ -3687,13 +3730,6 @@ export default function App() {
                     setCommPin(pin)
                     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '')
                   }}
-                />
-              )}
-              {tab === 'Trophy' && (
-                <TrophyRoom
-                  championships={data.championships || []}
-                  coaches={data.coaches || []}
-                  isMobile={isMobile}
                 />
               )}
               {tab === 'Sync' && (
