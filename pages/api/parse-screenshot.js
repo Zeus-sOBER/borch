@@ -467,7 +467,7 @@ Return ONLY a JSON object (no markdown, no explanation):
   ],
   "championship": null,
   "rankings": [
-    { "rank": 1, "team_name": "Alabama", "record": "5-0" }
+    { "rank": 1, "lw": 3, "team_name": "Alabama", "record": "5-0", "points": 1550, "last_week_result": "W 42-17 vs Auburn", "this_week": "at Georgia" }
   ],
   "recruiting": [
     { "player_name": "", "position": "", "stars": 0, "school": "", "event_type": "commitment|decommitment|offer|visit" }
@@ -484,10 +484,28 @@ HEISMAN WATCH INSTRUCTIONS (type = "heisman_watch"):
 - "trend" = "up" if arrow is green/pointing up, "down" if red/pointing down, "same" otherwise
 
 RANKINGS INSTRUCTIONS (type = "rankings" or "ap_poll"):
-- Extract every ranked team visible: rank number, team name, record if shown, and poll points if shown
-- Use the "rankings" array. For ap_poll type, include a "points" field per entry if visible.
-- Leave "games", "standings", "players" empty for a pure rankings screenshot
-- Example ap_poll entry: { "rank": 1, "team_name": "Alabama", "record": "5-0", "points": 1550 }
+- Extract every ranked team visible.
+- Use the "rankings" array. Leave "games", "standings", "players" empty for a pure rankings screenshot.
+
+CRITICAL for EA CFB "TOP 25 RANKINGS" / "AP POLL" screens — the table has these columns in order:
+  RANK | LW | NAME/VOTES | W-L | PTS | LAST WEEK | THIS WEEK
+  - RANK = the team's CURRENT rank (leftmost column, shown in bold/gold). THIS is the "rank" field.
+  - LW = LAST WEEK'S rank (second column). This is DIFFERENT from RANK. Do NOT use LW as the rank.
+  - NAME/VOTES = team name, sometimes with vote count in parentheses e.g. "Miami University (37)"
+    → strip the vote count from the team name: "Miami University (37)" → team_name = "Miami University"
+  - W-L = current season record
+  - PTS = total voting points (integer)
+  - LAST WEEK = description of last week's result (text like "W 48-28 vs 11 Miami")
+  - THIS WEEK = upcoming opponent (text like "3 Alabama" or "at Texas State")
+
+Example: a row showing  "2 | 2 | Miami University (37) | 2-0 | 1597 | W 48-28 vs 11 Miami | 3 Alabama"
+  → { "rank": 2, "lw": 2, "team_name": "Miami University", "record": "2-0", "points": 1597, "last_week_result": "W 48-28 vs 11 Miami", "this_week": "3 Alabama" }
+
+Another example: "4 | 5 | Alabama (5) | 1-0 | 1281 | — | at 1 Miami University"
+  → { "rank": 4, "lw": 5, "team_name": "Alabama", "record": "1-0", "points": 1281, "last_week_result": null, "this_week": "at 1 Miami University" }
+
+If LW shows "NR" (not ranked), set lw to null.
+Always use rank (first column) NOT lw (second column) as the "rank" field.
 
 For "championship": { "team_name": "", "coach_name": "", "record": "", "opponent_team": "", "opponent_record": "", "result": "56-29", "season": 0, "championship_type": "national|conference|bowl" }
 - result = final score of the championship game (winning score first, e.g. "56-29")
@@ -939,21 +957,30 @@ async function saveToSupabase(data, coaches, humanTeams) {
     if (!error) saved.championship = true;
   }
 
-  // Save AP Poll → league_settings.ap_rankings (read-only in UI, only updated via screenshot)
+  // Save AP Poll → dedicated ap_rankings table (editable row-by-row in Supabase)
   if (data.type === 'ap_poll' && data.rankings?.length > 0) {
-    const apEntries = data.rankings.map(e => ({
-      rank:      e.rank,
-      team_name: e.team_name,
-      record:    e.record ?? null,
-      points:    e.points ?? null,
-    }));
+    const season = data.season ?? 1;
+    // Delete existing entries for this season then re-insert so rank order is clean
+    await supabase.from('ap_rankings').delete().eq('season', season);
+    for (const e of data.rankings) {
+      if (!e.team_name || e.rank == null) continue;
+      const { error } = await supabase.from('ap_rankings').upsert({
+        season,
+        rank:             e.rank,
+        lw:               e.lw               ?? null,
+        team_name:        e.team_name,
+        record:           e.record           ?? null,
+        points:           e.points           ?? null,
+        last_week_result: e.last_week_result ?? null,
+        this_week:        e.this_week        ?? null,
+        updated_at:       new Date().toISOString(),
+      }, { onConflict: 'season,rank' });
+      if (!error) saved.rankings++;
+    }
+    // Also stamp the updated_at on league_settings for the "Updated on" display
     await supabase.from('league_settings').upsert({
-      id:                 1,
-      ap_rankings:        apEntries,
-      ap_poll_updated_at: new Date().toISOString(),
-      updated_at:         new Date().toISOString(),
+      id: 1, ap_poll_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }, { onConflict: 'id' });
-    saved.rankings = apEntries.length;
   }
 
   // Save CFP/game poll rankings → update rank column on teams

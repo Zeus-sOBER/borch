@@ -172,10 +172,14 @@ export default async function handler(req, res) {
         ].join('\n')
       : 'No team stats synced yet for this season.';
 
-    // ── AP Rankings ──────────────────────────────────────────────────────
+    // ── AP Rankings — read from dedicated table, fall back to league_settings ──
+    const { data: apRankingsRows } = await supabase
+      .from('ap_rankings').select('*').order('rank', { ascending: true });
     const { data: leagueSettings } = await supabase
       .from('league_settings').select('ap_rankings').eq('id', 1).single();
-    const apRankings = leagueSettings?.ap_rankings || [];
+    const apRankings = (apRankingsRows && apRankingsRows.length > 0)
+      ? apRankingsRows
+      : (leagueSettings?.ap_rankings || []);
 
     // Helper: get a team's AP rank (or null)
     const getApRank = (teamName) => {

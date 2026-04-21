@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   const season = req.query.season || 1
 
-  const [teamsRes, gamesRes, playersRes, logRes, coachesRes, settingsRes, heismanRes, champsRes] = await Promise.all([
+  const [teamsRes, gamesRes, playersRes, logRes, coachesRes, settingsRes, heismanRes, champsRes, apRankingsRes] = await Promise.all([
     supabase.from('teams').select('*').order('wins', { ascending: false }),
     supabase.from('games').select('*').order('week', { ascending: true }),
     supabase.from('players').select('*'),
@@ -14,10 +14,24 @@ export default async function handler(req, res) {
     supabase.from('league_settings').select('*').eq('id', 1).single(),
     supabase.from('heisman_watch').select('*').order('rank', { ascending: true }).limit(5),
     supabase.from('championships').select('*').eq('championship_type', 'national').order('season', { ascending: false }),
+    supabase.from('ap_rankings').select('*').order('rank', { ascending: true }),
   ])
 
   const coaches  = coachesRes.data  || []
-  const settings = settingsRes.data || { current_week: 0, current_season: 1 }
+  const rawSettings = settingsRes.data || { current_week: 0, current_season: 1 }
+
+  // Inject ap_rankings from the dedicated table into settings so the frontend
+  // can read settings.ap_rankings exactly as before — no frontend changes needed.
+  const apRankingsRows = apRankingsRes.data || []
+  // Filter to the current season; fall back to league_settings JSONB if table is empty
+  const currentSeason = rawSettings.current_season ?? 1
+  const apForSeason = apRankingsRows.filter(r => r.season === currentSeason)
+  const settings = {
+    ...rawSettings,
+    ap_rankings: apForSeason.length > 0
+      ? apForSeason.map(r => ({ rank: r.rank, team_name: r.team_name, record: r.record, points: r.points, lw: r.lw, last_week_result: r.last_week_result, this_week: r.this_week }))
+      : (rawSettings.ap_rankings || []),
+  }
 
   // ── Normalize teams: rename team_name → name, join coach from coaches table ──
   const teams = (teamsRes.data || []).map((t, i) => {
