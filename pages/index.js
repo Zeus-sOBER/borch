@@ -1120,7 +1120,7 @@ function Standings({ teams, isMobile, settings }) {
   const PLAYOFF_LINE = 4
 
   // ── AP Poll view ───────────────────────────────────
-  const apRankings = settings?.ap_rankings || []
+  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (a.rank || 99) - (b.rank || 99))
 
   return (
     <div>
