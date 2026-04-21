@@ -113,8 +113,9 @@ export default async function handler(req, res) {
     const isGoogleDoc   = inputMimeType === 'application/vnd.google-apps.document'  || fileName?.toLowerCase().endsWith('.gdoc');
     const isGoogleSheet = inputMimeType === 'application/vnd.google-apps.spreadsheet' || fileName?.toLowerCase().endsWith('.gsheet');
 
-    const isScheduleImport = typeHint === 'schedule'
-    const isApPollHint = typeHint === 'ap_poll';
+    const isScheduleImport  = typeHint === 'schedule';
+    const isApPollHint      = typeHint === 'ap_poll';
+    const isTeamStatsHint   = typeHint === 'team_stats';
 
     let parsedResult;
 
@@ -130,6 +131,10 @@ export default async function handler(req, res) {
       // ── SCHEDULE SCREENSHOT → upcoming matchups from game screen ──────────
       const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
       parsedResult = await parseScheduleImage(base64, mimeType, coaches, humanTeams);
+    } else if (isTeamStatsHint) {
+      // ── TEAM STATS SCREENSHOT → EA CFB Team Stats table ──────────────────
+      const { base64, mimeType } = await fetchDriveImageAsBase64(fileId);
+      parsedResult = await parseTeamStats(base64, mimeType, currentSeason);
     } else if (isGoogleDoc) {
       // ── GOOGLE DOC (general) → scores, notes, stats, etc. ────────────────
       const docText = await fetchGoogleDocText(fileId);
@@ -148,12 +153,13 @@ export default async function handler(req, res) {
 
     // Log the scan — only insert columns that exist in the schema
     const totalRecords =
-      (saveResult?.games     || 0) +
-      (saveResult?.players   || 0) +
-      (saveResult?.standings || 0) +
-      (saveResult?.recruiting|| 0) +
-      (saveResult?.rankings  || 0) +
-      (saveResult?.heisman   || 0) +
+      (saveResult?.games      || 0) +
+      (saveResult?.players    || 0) +
+      (saveResult?.standings  || 0) +
+      (saveResult?.recruiting || 0) +
+      (saveResult?.rankings   || 0) +
+      (saveResult?.heisman    || 0) +
+      (saveResult?.team_stats || 0) +
       (saveResult?.championship ? 1 : 0);
 
     await supabase.from('scan_log').insert({
@@ -697,8 +703,99 @@ function normalizeTeamName(name) {
   return TEAM_NAME_ALIASES[key] ?? name;
 }
 
+// ─── Parse Team Stats Screenshot ─────────────────────────────────────────────
+// Handles both the Offense and Defense tabs from the EA CFB Team Stats screen.
+// Returns { type: 'team_stats', team_stats: [...], season, summary }
+async function parseTeamStats(base64, mimeType, season) {
+  const prompt = `You are reading an EA Sports College Football dynasty Team Stats screen.
+
+The screen shows a national leaderboard table. You need to extract ALL rows visible.
+
+OFFENSE COLUMNS (when showing Offense tab):
+TEAM, GP, PPG, PTS, OFF, YPG, YPP, PASS, PYPG, PTD, RUSH
+- GP = games played
+- PPG = points per game scored
+- PTS = total points scored
+- OFF = total offensive yards
+- YPG = total yards per game
+- YPP = yards per play
+- PASS = total passing yards
+- PYPG = passing yards per game
+- PTD = passing touchdowns
+- RUSH = total rushing yards
+
+DEFENSE COLUMNS (when showing Defense tab):
+TEAM, GP, DPPG, PTS, TOTAL, YPGA, PASS, DYGA, RUSH, RYPGA, SACK
+- GP = games played
+- DPPG = points per game allowed (defensive)
+- PTS = total points allowed
+- TOTAL = total yards allowed
+- YPGA = yards per game allowed
+- PASS = passing yards allowed
+- DYGA = defensive yards per game allowed (same as YPGA in some views)
+- RUSH = rushing yards allowed
+- RYPGA = rushing yards per game allowed
+- SACK = sacks recorded
+
+IMPORTANT:
+- Team names may have AP rank numbers before them (e.g. "4 Alabama" → team = "Alabama", rank = 4)
+- Strip rank numbers from team names
+- AP rank prefixes look like "20 Oregon" or "2 Miami University" → extract just the school name
+- Read ALL visible rows, not just top rows
+- If you see "Miami University" that is Miami (OH), NOT Miami (FL)
+- Detect whether this is the OFFENSE or DEFENSE tab based on the column headers
+
+Respond with ONLY valid JSON:
+{
+  "stat_type": "offense" OR "defense",
+  "team_stats": [
+    {
+      "team_name": "Oregon",
+      "ap_rank": 20,
+      "gp": 1,
+      // Offense fields (only populate if offense tab):
+      "ppg": 52.0, "pts_scored": 52, "off_yards": 564, "ypg": 564.0, "ypp": 7.0,
+      "pass_yards": 272, "pypg": 272.0, "pass_tds": 6, "rush_yards": 292,
+      // Defense fields (only populate if defense tab):
+      "dppg": null, "pts_allowed": null, "total_yds_allowed": null,
+      "ypga": null, "pass_yds_allowed": null, "dyga": null,
+      "rush_yds_allowed": null, "rypga": null, "sacks": null
+    }
+  ]
+}`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: [{
+        type: 'image',
+        source: { type: 'base64', media_type: mimeType, data: base64 },
+      }, {
+        type: 'text',
+        text: prompt,
+      }],
+    }],
+  });
+
+  const raw = response.content[0]?.text || '';
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in team stats response');
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  return {
+    type: 'team_stats',
+    season,
+    stat_type: parsed.stat_type || 'offense',
+    team_stats: parsed.team_stats || [],
+    summary: `Team stats (${parsed.stat_type || 'offense'}): ${(parsed.team_stats || []).length} teams parsed`,
+  };
+}
+
+// ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
 async function saveToSupabase(data, coaches, humanTeams) {
-  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0, heisman: 0 };
+  const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0, heisman: 0, team_stats: 0 };
 
   // Helper: find coach name for a team
   const findCoach = (teamName) => {
@@ -886,6 +983,39 @@ async function saveToSupabase(data, coaches, humanTeams) {
         event_type: event.event_type ?? 'unknown'
       });
       if (!error) saved.recruiting++;
+    }
+  }
+
+  // Save team stats (from EA CFB Team Stats screen)
+  if (data.type === 'team_stats' && data.team_stats?.length > 0) {
+    const season = data.season ?? 1;
+    for (const s of data.team_stats) {
+      if (!s.team_name) continue;
+      const { error } = await supabase.from('team_stats').upsert({
+        season,
+        team_name:          normalizeTeamName(s.team_name),
+        gp:                 s.gp                 ?? null,
+        ppg:                s.ppg                ?? null,
+        pts_scored:         s.pts_scored         ?? null,
+        off_yards:          s.off_yards          ?? null,
+        ypg:                s.ypg                ?? null,
+        ypp:                s.ypp                ?? null,
+        pass_yards:         s.pass_yards         ?? null,
+        pypg:               s.pypg               ?? null,
+        pass_tds:           s.pass_tds           ?? null,
+        rush_yards:         s.rush_yards         ?? null,
+        dppg:               s.dppg               ?? null,
+        pts_allowed:        s.pts_allowed        ?? null,
+        total_yds_allowed:  s.total_yds_allowed  ?? null,
+        ypga:               s.ypga               ?? null,
+        pass_yds_allowed:   s.pass_yds_allowed   ?? null,
+        dyga:               s.dyga               ?? null,
+        rush_yds_allowed:   s.rush_yds_allowed   ?? null,
+        rypga:              s.rypga              ?? null,
+        sacks:              s.sacks              ?? null,
+        updated_at:         new Date().toISOString(),
+      }, { onConflict: 'season,team_name' });
+      if (!error) saved.team_stats++;
     }
   }
 

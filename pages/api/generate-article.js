@@ -144,6 +144,34 @@ export default async function handler(req, res) {
     const { data: championships } = await supabase
       .from('championships').select('*').order('season', { ascending: false }).limit(10);
 
+    // ── Team Stats ───────────────────────────────────────────────────────
+    const { data: leagueSettingsForSeason } = await supabase
+      .from('league_settings').select('current_season').eq('id', 1).single();
+    const currentSeason = leagueSettingsForSeason?.current_season ?? 1;
+    const { data: allTeamStats } = await supabase
+      .from('team_stats').select('*').eq('season', currentSeason)
+      .order('ppg', { ascending: false, nullsFirst: false });
+    const teamStatsRows = (allTeamStats || []).filter(s =>
+      humanTeams.some(ht => ht.toLowerCase() === s.team_name?.toLowerCase())
+    );
+    const teamStatsSummary = teamStatsRows.length > 0
+      ? [
+          '=== TEAM STATS (human teams, current season) ===',
+          'OFFENSE (ranked by scoring):',
+          teamStatsRows
+            .filter(s => s.ppg != null)
+            .sort((a, b) => (b.ppg || 0) - (a.ppg || 0))
+            .map((s, i) => `  ${i + 1}. ${s.team_name}: ${s.ppg} PPG, ${s.ypg} YPG, ${s.pass_tds} PTD`)
+            .join('\n'),
+          'DEFENSE (ranked by fewest points allowed):',
+          teamStatsRows
+            .filter(s => s.dppg != null)
+            .sort((a, b) => (a.dppg || 99) - (b.dppg || 99))
+            .map((s, i) => `  ${i + 1}. ${s.team_name}: ${s.dppg} DPPG, ${s.ypga} YPGA, ${s.sacks} sacks`)
+            .join('\n'),
+        ].join('\n')
+      : 'No team stats synced yet for this season.';
+
     // ── AP Rankings ──────────────────────────────────────────────────────
     const { data: leagueSettings } = await supabase
       .from('league_settings').select('ap_rankings').eq('id', 1).single();
@@ -284,6 +312,8 @@ COLLEGE FOOTBALL SCHEDULE:
 
 AP TOP 25 RANKINGS:
 ${apRankingsSummary}
+
+${teamStatsSummary}
 
 ABSOLUTE RULES:
 1. Reference every coach by name at least once — they are the stars.

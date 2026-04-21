@@ -19,7 +19,7 @@ const C = {
   subtle:  '#2a2a3a',
 }
 
-const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Matchups', 'Awards', 'Media', 'Sync']
+const ALL_TABS = ['Dashboard', 'Standings', 'Season', 'Awards', 'Media', 'Sync']
 
 // ── Game status helper ─────────────────────────────────────────
 // A game is only "final" if it has real scores — not null, not 0-0
@@ -213,7 +213,6 @@ const ALL_NAV_ITEMS = [
   { id: 'Dashboard', icon: '🏠', label: 'Home' },
   { id: 'Standings', icon: '📊', label: 'Standings' },
   { id: 'Season',    icon: '📅', label: 'Season' },
-  { id: 'Matchups',  icon: '🏈', label: 'Matchups' },
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Awards',    icon: '🏆', label: 'Awards' },
   { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
@@ -1503,9 +1502,10 @@ function getPhase(w) {
   return SEASON_PHASES.find(p => w >= p.range[0] && w <= p.range[1]) || { label: `WEEK ${w}`, sub: '' }
 }
 
-function Season({ games, teams, isMobile, settings }) {
+function Season({ games, teams, isMobile, settings, articles, onArticleOpen, onArticlesChange, commPin, onPinSet }) {
   const humanNames = new Set(teams.map(t => (t.name || t.team_name || '').toLowerCase()))
   const currentWeek = settings?.current_week ?? 0
+  const [subTab, setSubTab] = useState('schedule')
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
   const [sharingGame, setSharingGame] = useState(null)
   useEffect(() => { setSelectedWeek(currentWeek) }, [currentWeek])
@@ -1516,8 +1516,33 @@ function Season({ games, teams, isMobile, settings }) {
   const weekGames = games.filter(g => g.week === selectedWeek)
   const phase = getPhase(selectedWeek)
 
+  const SUB_TABS = [
+    { id: 'schedule', label: '📅 Schedule' },
+    { id: 'matchups', label: '🏈 Matchups' },
+    { id: 'stats',    label: '📊 Team Stats' },
+    { id: 'h2h',      label: '⚔️ H2H Records' },
+  ]
+
   return (
     <div>
+      {/* Sub-tab nav */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
+        {SUB_TABS.map(s => (
+          <button key={s.id} onClick={() => setSubTab(s.id)} style={{
+            background: subTab === s.id ? C.accent : C.card,
+            color: subTab === s.id ? '#000' : C.muted,
+            border: `1px solid ${subTab === s.id ? C.accent : C.border}`,
+            borderRadius: 20, padding: isMobile ? '8px 14px' : '8px 18px',
+            cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+            fontSize: isMobile ? 12 : 13, letterSpacing: 0.5,
+            whiteSpace: 'nowrap', flexShrink: 0,
+            transition: 'all 0.15s',
+          }}>{s.label}</button>
+        ))}
+      </div>
+
+      {/* ── Schedule view ── */}
+      {subTab === 'schedule' && <>
       <SectionTitle isMobile={isMobile} sub={phase.sub}>{phase.label}</SectionTitle>
 
       {/* Week timeline bar */}
@@ -1645,6 +1670,608 @@ function Season({ games, teams, isMobile, settings }) {
 
       {/* Share card overlay */}
       {sharingGame && <ShareCard game={sharingGame} onClose={() => setSharingGame(null)} apRankings={seasonApRankings} />}
+      </>}
+
+      {/* ── Matchups view ── */}
+      {subTab === 'matchups' && (
+        <CompactMatchupsView
+          games={games} teams={teams} settings={settings}
+          articles={articles || []} isMobile={isMobile}
+          onArticleOpen={onArticleOpen} onArticlesChange={onArticlesChange}
+          commPin={commPin} onPinSet={onPinSet}
+        />
+      )}
+
+      {/* ── Team Stats view ── */}
+      {subTab === 'stats' && (
+        <TeamStatsView
+          teams={teams} isMobile={isMobile}
+          season={settings?.current_season ?? 1}
+        />
+      )}
+
+      {/* ── Head-to-Head view ── */}
+      {subTab === 'h2h' && (
+        <HeadToHeadView games={games} teams={teams} isMobile={isMobile} />
+      )}
+    </div>
+  )
+}
+
+// ── Compact Matchups View (inside Season tab) ───────────────────
+function CompactMatchupsView({ games, teams, settings, articles, isMobile, onArticleOpen, onArticlesChange, commPin, onPinSet }) {
+  const finalGames    = games.filter(gameIsFinal)
+  const upcomingGames = games.filter(g => !gameIsFinal(g) && g.home_team && g.away_team)
+  const apRankings    = settings?.ap_rankings || []
+
+  const [generating,    setGenerating]    = useState(null)
+  const [genError,      setGenError]      = useState({})
+  const [pinInput,      setPinInput]      = useState('')
+  const [pinError,      setPinError]      = useState('')
+  const [showPinFor,    setShowPinFor]    = useState(null)
+  const [localArticles, setLocalArticles] = useState([])
+
+  const gameKey = (g) => `${g.home_team}|${g.away_team}|${g.week}`
+
+  const allPreviewArticles = [
+    ...localArticles,
+    ...(articles || []).filter(a => a.article_type === 'matchup-preview'),
+  ]
+
+  const getGameBlurb = (g) => {
+    const match = allPreviewArticles.find(a =>
+      a.title?.includes(g.home_team) && a.title?.includes(g.away_team) &&
+      (g.week == null || a.week == null || a.week === g.week)
+    )
+    if (!match?.content) return null
+    const firstPara = match.content.split(/\n+/).find(p => p.trim().length > 30) || ''
+    return firstPara.length > 220 ? firstPara.slice(0, 217) + '…' : firstPara
+  }
+
+  const generatePreview = async (g, pin) => {
+    const key = gameKey(g)
+    setGenerating(key)
+    setGenError(e => ({ ...e, [key]: null }))
+    try {
+      const res = await fetch('/api/generate-article', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleType: 'matchup-preview', homeTeam: g.home_team, awayTeam: g.away_team, week: g.week, pin }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setGenError(e => ({ ...e, [key]: data.error || 'Generation failed' })); return }
+      const newArticle = { title: `Matchup Preview: ${g.home_team} vs ${g.away_team}${g.week ? ` — Week ${g.week}` : ''}`, article_type: 'matchup-preview', week: g.week, content: data.article, created_at: new Date().toISOString() }
+      setLocalArticles(prev => [newArticle, ...prev])
+      onArticlesChange?.()
+      if (onArticleOpen) onArticleOpen(newArticle)
+    } catch (e) {
+      setGenError(err => ({ ...err, [key]: 'Something went wrong. Try again.' }))
+    } finally { setGenerating(null) }
+  }
+
+  const handleGenerate = (g) => {
+    const key = gameKey(g)
+    if (commPin) { generatePreview(g, commPin) }
+    else { setShowPinFor(showPinFor === key ? null : key); setPinInput(''); setPinError('') }
+  }
+
+  const submitPin = (g) => {
+    if (!pinInput.trim()) return
+    fetch('/api/coaches/0', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinInput }) })
+      .then(r => {
+        if (r.status === 403) { setPinError('Wrong PIN'); return }
+        if (onPinSet) onPinSet(pinInput)
+        setShowPinFor(null)
+        generatePreview(g, pinInput)
+      }).catch(() => setPinError('Something went wrong'))
+  }
+
+  const getH2H = (a, b) => finalGames
+    .filter(g => (g.home_team === a && g.away_team === b) || (g.home_team === b && g.away_team === a))
+    .sort((x, y) => y.week - x.week)
+
+  const getRecent = (name) => finalGames
+    .filter(g => g.home_team === name || g.away_team === name)
+    .sort((a, b) => b.week - a.week).slice(0, 4)
+
+  const findTeam = (name) => teams.find(t => t.name === name)
+
+  if (upcomingGames.length === 0) {
+    return (
+      <Card style={{ textAlign: 'center', padding: '48px 20px', borderStyle: 'dashed' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
+        <div style={{ color: C.text, fontSize: 16, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, marginBottom: 8 }}>No Upcoming Matchups</div>
+        <div style={{ color: C.muted, fontSize: 13 }}>Sync a schedule to see upcoming game previews here.</div>
+      </Card>
+    )
+  }
+
+  // Group upcoming games by week
+  const weeks = [...new Set(upcomingGames.map(g => g.week))].sort((a, b) => a - b)
+  const nextThreeWeeks = weeks.slice(0, 3)
+
+  return (
+    <div>
+      <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>
+        Showing upcoming matchups · <span style={{ color: C.accent }}>{upcomingGames.length} games scheduled</span>
+      </div>
+      {nextThreeWeeks.map(wk => {
+        const wkGames = upcomingGames.filter(g => g.week === wk)
+        return (
+          <div key={wk} style={{ marginBottom: 24 }}>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 8 }}>
+              Week {wk} · {getPhase(wk).label}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {wkGames.map((g, i) => {
+                const key = gameKey(g)
+                const h2h = getH2H(g.home_team, g.away_team)
+                const homeRecent = getRecent(g.home_team)
+                const awayRecent = getRecent(g.away_team)
+                const homeTeam = findTeam(g.home_team)
+                const awayTeam = findTeam(g.away_team)
+                const homeRank = getApRank(g.home_team, apRankings)
+                const awayRank = getApRank(g.away_team, apRankings)
+                let homeH2H = 0, awayH2H = 0
+                h2h.forEach(m => {
+                  const hw = m.home_score > m.away_score
+                  if ((m.home_team === g.home_team && hw) || (m.away_team === g.home_team && !hw)) homeH2H++
+                  else awayH2H++
+                })
+                const blurb = getGameBlurb(g)
+                const isGen = generating === key
+                const showPin = showPinFor === key
+
+                return (
+                  <Card key={`${key}-${i}`} style={{ padding: 0, overflow: 'hidden' }}>
+                    {/* Compact teams row */}
+                    <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
+                      {/* Home */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <TeamLogo team={g.home_team} size={22} />
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {homeRank && <ApRankBadge rank={homeRank} />}
+                              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 14 : 16, fontWeight: 700, color: C.text }}>{g.home_team}</span>
+                            </div>
+                            {homeTeam && <div style={{ color: C.muted, fontSize: 10 }}>{homeTeam.wins}-{homeTeam.losses}{homeTeam.coach ? ` · ${homeTeam.coach}` : ''}{homeTeam.pts ? ` · ${Math.round(homeTeam.pts / ((homeTeam.wins + homeTeam.losses) || 1))} ppg` : ''}</div>}
+                          </div>
+                        </div>
+                        {homeRecent.length > 0 && (
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {homeRecent.map((m, j) => {
+                              const won = m.home_team === g.home_team ? m.home_score > m.away_score : m.away_score > m.home_score
+                              return <span key={j} style={{ width: 18, height: 18, borderRadius: 3, background: won ? C.green + '22' : C.red + '22', color: won ? C.green : C.red, fontSize: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Oswald', sans-serif", fontWeight: 700, border: `1px solid ${won ? C.green + '44' : C.red + '44'}` }}>{won ? 'W' : 'L'}</span>
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Center: VS + series */}
+                      <div style={{ textAlign: 'center', minWidth: 70 }}>
+                        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.subtle, fontWeight: 700, marginBottom: 4 }}>VS</div>
+                        {h2h.length > 0 ? (
+                          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, lineHeight: 1 }}>
+                            <span style={{ color: homeH2H >= awayH2H ? C.green : C.muted }}>{homeH2H}</span>
+                            <span style={{ color: C.subtle }}> – </span>
+                            <span style={{ color: awayH2H > homeH2H ? C.green : C.muted }}>{awayH2H}</span>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 8, color: C.subtle, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>FIRST<br/>MTG</div>
+                        )}
+                      </div>
+
+                      {/* Away */}
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, justifyContent: 'flex-end' }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 14 : 16, fontWeight: 700, color: C.text }}>{g.away_team}</span>
+                              {awayRank && <ApRankBadge rank={awayRank} />}
+                            </div>
+                            {awayTeam && <div style={{ color: C.muted, fontSize: 10 }}>{awayTeam.wins}-{awayTeam.losses}{awayTeam.coach ? ` · ${awayTeam.coach}` : ''}{awayTeam.pts ? ` · ${Math.round(awayTeam.pts / ((awayTeam.wins + awayTeam.losses) || 1))} ppg` : ''}</div>}
+                          </div>
+                          <TeamLogo team={g.away_team} size={22} />
+                        </div>
+                        {awayRecent.length > 0 && (
+                          <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end' }}>
+                            {awayRecent.map((m, j) => {
+                              const won = m.home_team === g.away_team ? m.home_score > m.away_score : m.away_score > m.home_score
+                              return <span key={j} style={{ width: 18, height: 18, borderRadius: 3, background: won ? C.green + '22' : C.red + '22', color: won ? C.green : C.red, fontSize: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Oswald', sans-serif", fontWeight: 700, border: `1px solid ${won ? C.green + '44' : C.red + '44'}` }}>{won ? 'W' : 'L'}</span>
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Blurb + generate row */}
+                    <div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 14px', background: C.surface + '88', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      {blurb && <div style={{ flex: 1, color: C.muted, fontSize: 11, lineHeight: 1.5, minWidth: 120 }}>{blurb}</div>}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button onClick={() => handleGenerate(g)} disabled={isGen} style={{
+                          background: isGen ? C.subtle : commPin ? C.accent + '18' : 'transparent',
+                          color: isGen ? C.muted : commPin ? C.accent : C.muted,
+                          border: `1px solid ${isGen ? C.border : commPin ? C.accent + '55' : C.border}`,
+                          borderRadius: 6, padding: '5px 12px', cursor: isGen ? 'not-allowed' : 'pointer',
+                          fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 0.5,
+                          textTransform: 'uppercase', whiteSpace: 'nowrap',
+                        }}>
+                          {isGen ? '⏳ Generating…' : '✦ Preview'}
+                        </button>
+                        {genError[key] && <span style={{ color: C.red, fontSize: 10 }}>❌ {genError[key]}</span>}
+                      </div>
+                    </div>
+
+                    {/* Inline PIN */}
+                    {showPin && (
+                      <div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input type="password" placeholder="PIN" value={pinInput} onChange={e => { setPinInput(e.target.value); setPinError('') }} onKeyDown={e => e.key === 'Enter' && submitPin(g)} style={{ flex: 1, minWidth: 100, background: C.card, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 5, padding: '6px 10px', color: C.text, fontSize: 12 }} autoFocus />
+                        <button onClick={() => submitPin(g)} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 5, padding: '6px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>Generate →</button>
+                        <button onClick={() => setShowPinFor(null)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
+                        {pinError && <span style={{ color: C.red, fontSize: 11, width: '100%' }}>❌ {pinError}</span>}
+                      </div>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Remaining weeks (collapsed / scrollable) */}
+      {weeks.length > 3 && (
+        <div style={{ marginTop: 8 }}>
+          <details>
+            <summary style={{ color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", letterSpacing: 1, listStyle: 'none', userSelect: 'none' }}>
+              ▸ Show {weeks.slice(3).length} more week{weeks.slice(3).length !== 1 ? 's' : ''} ({upcomingGames.filter(g => !nextThreeWeeks.includes(g.week)).length} games)
+            </summary>
+            <div style={{ marginTop: 12 }}>
+              {weeks.slice(3).map(wk => {
+                const wkGames = upcomingGames.filter(g => g.week === wk)
+                return (
+                  <div key={wk} style={{ marginBottom: 16 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>
+                      Week {wk} · {getPhase(wk).label}
+                    </div>
+                    {wkGames.map((g, i) => {
+                      const homeTeam = findTeam(g.home_team)
+                      const awayTeam = findTeam(g.away_team)
+                      const homeRank = getApRank(g.home_team, apRankings)
+                      const awayRank = getApRank(g.away_team, apRankings)
+                      return (
+                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', background: C.card, borderRadius: 6, border: `1px solid ${C.border}`, marginBottom: 6 }}>
+                          <TeamLogo team={g.home_team} size={18} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {homeRank && <ApRankBadge rank={homeRank} />}
+                            <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{g.home_team}</span>
+                            {homeTeam && <span style={{ color: C.muted, fontSize: 11 }}>{homeTeam.wins}-{homeTeam.losses}</span>}
+                          </div>
+                          <span style={{ color: C.subtle, fontSize: 11, fontFamily: "'Oswald', sans-serif" }}>vs</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {awayRank && <ApRankBadge rank={awayRank} />}
+                            <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{g.away_team}</span>
+                            {awayTeam && <span style={{ color: C.muted, fontSize: 11 }}>{awayTeam.wins}-{awayTeam.losses}</span>}
+                          </div>
+                          <TeamLogo team={g.away_team} size={18} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          </details>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Team Stats View (inside Season tab) ────────────────────────
+function TeamStatsView({ teams, isMobile, season }) {
+  const [view, setView] = useState('offense')
+  const [stats, setStats] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/team-stats?season=${season}`)
+      .then(r => r.json())
+      .then(d => setStats(d.stats || []))
+      .catch(() => setStats([]))
+      .finally(() => setLoading(false))
+  }, [season])
+
+  const humanTeamNames = new Set(teams.map(t => (t.name || '').toLowerCase()))
+
+  const findCoach = (teamName) => {
+    const t = teams.find(t => t.name === teamName)
+    return t?.coach || null
+  }
+
+  if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 60, fontFamily: "'Oswald', sans-serif", letterSpacing: 2 }}>LOADING STATS...</div>
+
+  if (stats.length === 0) {
+    return (
+      <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
+        <div style={{ fontSize: 48, marginBottom: 14 }}>📊</div>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.text, marginBottom: 8, letterSpacing: 1 }}>No Team Stats Yet</div>
+        <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, maxWidth: 360, margin: '0 auto' }}>
+          Sync a Team Stats screenshot from EA CFB using the Sync tab.<br />
+          Select <strong style={{ color: C.accent }}>📊 Team Stats</strong> as the type before scanning.
+        </div>
+      </Card>
+    )
+  }
+
+  const offenseSorted = [...stats].filter(s => s.ppg != null).sort((a, b) => (b.ppg || 0) - (a.ppg || 0))
+  const defenseSorted = [...stats].filter(s => s.dppg != null).sort((a, b) => (a.dppg || 99) - (b.dppg || 99))
+
+  const isHuman = (name) => humanTeamNames.has((name || '').toLowerCase())
+
+  const StatTable = ({ rows, columns }) => (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 480 : 'auto' }}>
+        <thead>
+          <tr style={{ background: C.surface }}>
+            <th style={{ padding: '10px 14px', textAlign: 'left', color: C.muted, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>#</th>
+            <th style={{ padding: '10px 14px', textAlign: 'left', color: C.muted, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>Team</th>
+            {columns.map(c => (
+              <th key={c.key} style={{ padding: '10px 10px', textAlign: 'center', color: C.muted, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }} title={c.title}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s, i) => {
+            const human = isHuman(s.team_name)
+            const coach = findCoach(s.team_name)
+            return (
+              <tr key={s.id || i} style={{ borderBottom: `1px solid ${C.border}44`, background: human ? C.accent + '08' : (i % 2 === 0 ? 'transparent' : C.surface + '44') }}>
+                <td style={{ padding: '10px 14px', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 14, fontWeight: 700 }}>{i + 1}</td>
+                <td style={{ padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <TeamLogo team={s.team_name} size={22} />
+                    <div>
+                      <div style={{ color: human ? C.text : C.muted, fontWeight: human ? 700 : 400, fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {s.team_name}
+                        {human && <span style={{ background: C.accent + '22', color: C.accent, fontSize: 8, padding: '1px 5px', borderRadius: 3, fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>USER</span>}
+                      </div>
+                      {coach && <div style={{ color: C.muted, fontSize: 10 }}>{coach}</div>}
+                    </div>
+                  </div>
+                </td>
+                {columns.map(c => (
+                  <td key={c.key} style={{ padding: '10px 10px', textAlign: 'center', color: s[c.key] != null ? (human ? C.text : C.muted) : C.subtle, fontSize: 13, fontFamily: s.key === 'team_name' ? 'inherit' : "'Oswald', sans-serif" }}>
+                    {s[c.key] != null ? s[c.key] : '—'}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const offCols = [
+    { key: 'gp',        label: 'GP',   title: 'Games Played' },
+    { key: 'ppg',       label: 'PPG',  title: 'Points Per Game' },
+    { key: 'ypg',       label: 'YPG',  title: 'Yards Per Game' },
+    { key: 'ypp',       label: 'YPP',  title: 'Yards Per Play' },
+    { key: 'pass_yards',label: 'PASS', title: 'Total Passing Yards' },
+    { key: 'pypg',      label: 'PYPG', title: 'Pass Yards Per Game' },
+    { key: 'pass_tds',  label: 'PTD',  title: 'Passing Touchdowns' },
+    { key: 'rush_yards',label: 'RUSH', title: 'Total Rushing Yards' },
+  ]
+
+  const defCols = [
+    { key: 'gp',              label: 'GP',    title: 'Games Played' },
+    { key: 'dppg',            label: 'DPPG',  title: 'Points Allowed Per Game' },
+    { key: 'pts_allowed',     label: 'PTS-A', title: 'Total Points Allowed' },
+    { key: 'ypga',            label: 'YPGA',  title: 'Yards Per Game Allowed' },
+    { key: 'pass_yds_allowed',label: 'PASS-A',title: 'Passing Yards Allowed' },
+    { key: 'rush_yds_allowed',label: 'RUSH-A',title: 'Rushing Yards Allowed' },
+    { key: 'rypga',           label: 'RYPGA', title: 'Rush Yards Per Game Allowed' },
+    { key: 'sacks',           label: 'SACK',  title: 'Sacks' },
+  ]
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[{ id: 'offense', label: '⚡ Offense' }, { id: 'defense', label: '🛡️ Defense' }].map(v => (
+          <button key={v.id} onClick={() => setView(v.id)} style={{
+            background: view === v.id ? C.accent : C.card, color: view === v.id ? '#000' : C.muted,
+            border: `1px solid ${view === v.id ? C.accent : C.border}`, borderRadius: 6,
+            padding: '8px 18px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+            fontSize: 12, letterSpacing: 0.5, transition: 'all 0.15s',
+          }}>{v.label}</button>
+        ))}
+        <span style={{ color: C.subtle, fontSize: 11, alignSelf: 'center', marginLeft: 4 }}>
+          Season {season} · {stats.length} teams · USER teams highlighted
+        </span>
+      </div>
+
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        {view === 'offense' ? (
+          offenseSorted.length > 0 ? <StatTable rows={offenseSorted} columns={offCols} /> : (
+            <div style={{ textAlign: 'center', padding: '32px 20px', color: C.muted, fontSize: 13 }}>
+              No offensive stats synced yet. Sync a Team Stats (Offense) screenshot.
+            </div>
+          )
+        ) : (
+          defenseSorted.length > 0 ? <StatTable rows={defenseSorted} columns={defCols} /> : (
+            <div style={{ textAlign: 'center', padding: '32px 20px', color: C.muted, fontSize: 13 }}>
+              No defensive stats synced yet. Sync a Team Stats (Defense) screenshot.
+            </div>
+          )
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ── Head-to-Head Records View (inside Season tab) ───────────────
+function HeadToHeadView({ games, teams, isMobile }) {
+  const [selected, setSelected] = useState(null)
+
+  const finalGames = games.filter(gameIsFinal)
+  const humanTeamNames = teams.map(t => t.name).filter(Boolean)
+
+  // Only games where BOTH teams are human-coached
+  const h2hGames = finalGames.filter(g =>
+    humanTeamNames.includes(g.home_team) && humanTeamNames.includes(g.away_team)
+  )
+
+  // Build records per team
+  const records = teams.map(team => {
+    const teamGames = h2hGames.filter(g => g.home_team === team.name || g.away_team === team.name)
+    let wins = 0, losses = 0
+    const opponents = {}
+    teamGames.forEach(g => {
+      const isHome = g.home_team === team.name
+      const won = isHome ? g.home_score > g.away_score : g.away_score > g.home_score
+      const opp = isHome ? g.away_team : g.home_team
+      if (won) wins++; else losses++
+      if (!opponents[opp]) opponents[opp] = { wins: 0, losses: 0, games: [] }
+      if (won) opponents[opp].wins++; else opponents[opp].losses++
+      opponents[opp].games.push(g)
+    })
+    return { ...team, h2hWins: wins, h2hLosses: losses, h2hGames: teamGames, opponents }
+  })
+
+  const sorted = [...records].sort((a, b) =>
+    b.h2hWins - a.h2hWins || a.h2hLosses - b.h2hLosses
+  )
+
+  if (h2hGames.length === 0) {
+    return (
+      <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
+        <div style={{ fontSize: 48, marginBottom: 14 }}>⚔️</div>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: C.text, marginBottom: 8, letterSpacing: 1 }}>No Head-to-Head Games Yet</div>
+        <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
+          Head-to-head records appear automatically once user-coached teams have played each other. Keep syncing results!
+        </div>
+      </Card>
+    )
+  }
+
+  const selectedRecord = selected ? sorted.find(r => r.name === selected) : null
+
+  const pct = (w, l) => {
+    const total = (w || 0) + (l || 0)
+    if (!total) return '—'
+    return ((w / total) * 100).toFixed(1) + '%'
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : selected ? '1fr 1fr' : '1fr', gap: 16 }}>
+        {/* Leaderboard */}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>⚔️ Head to Head Leaderboard</span>
+            <span style={{ color: C.subtle, fontSize: 10, marginLeft: 8 }}>user vs user only · {h2hGames.length} games</span>
+          </div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: C.surface }}>
+                  {['#', 'Coach / Team', 'W', 'L', '%'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Coach / Team' ? 'left' : 'center', color: C.muted, fontSize: 10, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((r, i) => {
+                  const isSelected = selected === r.name
+                  const teamData = teams.find(t => t.name === r.name)
+                  return (
+                    <tr key={r.name} onClick={() => setSelected(isSelected ? null : r.name)} style={{
+                      borderBottom: `1px solid ${C.border}44`, cursor: 'pointer',
+                      background: isSelected ? C.accent + '15' : i % 2 === 0 ? 'transparent' : C.surface + '44',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = C.subtle + '33' }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : C.surface + '44' }}
+                    >
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {i === 0 && <span style={{ fontSize: 14 }}>🥇</span>}
+                        {i === 1 && <span style={{ fontSize: 14 }}>🥈</span>}
+                        {i === 2 && <span style={{ fontSize: 14 }}>🥉</span>}
+                        {i > 2 && <span style={{ color: C.subtle, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{i + 1}</span>}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <TeamLogo team={r.name} size={22} />
+                          <div>
+                            <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{r.name}</div>
+                            {teamData?.coach && <div style={{ color: C.muted, fontSize: 10 }}>{teamData.coach}</div>}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: C.green, fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700 }}>{r.h2hWins}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: C.red, fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700 }}>{r.h2hLosses}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: C.accent, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{pct(r.h2hWins, r.h2hLosses)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* Selected coach detail */}
+        {selectedRecord && (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', background: C.surface, borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.accent, letterSpacing: 2, textTransform: 'uppercase' }}>
+                {selectedRecord.name} — Breakdown
+              </span>
+              <button onClick={() => setSelected(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ padding: 14 }}>
+              {Object.entries(selectedRecord.opponents).map(([opp, rec]) => {
+                const oppTeam = teams.find(t => t.name === opp)
+                return (
+                  <div key={opp} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <TeamLogo team={opp} size={22} />
+                        <div>
+                          <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{opp}</div>
+                          {oppTeam?.coach && <div style={{ color: C.muted, fontSize: 10 }}>{oppTeam.coach}</div>}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18 }}>
+                        <span style={{ color: rec.wins > rec.losses ? C.green : C.muted }}>{rec.wins}</span>
+                        <span style={{ color: C.subtle }}> – </span>
+                        <span style={{ color: rec.losses > rec.wins ? C.red : C.muted }}>{rec.losses}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {[...rec.games].sort((a, b) => b.week - a.week).map((g, gi) => {
+                        const isHome = g.home_team === selectedRecord.name
+                        const myScore = isHome ? g.home_score : g.away_score
+                        const oppScore = isHome ? g.away_score : g.home_score
+                        const won = myScore > oppScore
+                        return (
+                          <div key={gi} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 10px', background: won ? C.green + '10' : C.red + '10', borderRadius: 5, border: `1px solid ${won ? C.green + '33' : C.red + '33'}` }}>
+                            <span style={{ color: won ? C.green : C.red, fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{won ? 'W' : 'L'}</span>
+                            <span style={{ color: C.muted, fontSize: 11, flexShrink: 0 }}>Wk {g.week}</span>
+                            <span style={{ color: won ? C.text : C.muted, fontSize: 12, fontWeight: won ? 700 : 400 }}>{myScore} – {oppScore}</span>
+                            {g.game_type && g.game_type !== 'regular' && <span style={{ color: C.accent, fontSize: 10, fontFamily: "'Oswald', sans-serif", marginLeft: 'auto' }}>{g.game_type.replace(/_/g, ' ')}</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   )
 }
@@ -2501,6 +3128,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
     { id: 'championship',label: '🏆 Championship', desc: 'Trophy screens, bowl/CFP results' },
     { id: 'ap_poll',     label: '🗳️ AP Top 25',    desc: 'AP Top 25 poll screenshot — updates the Standings AP Poll view. Cannot be manually edited.' },
     { id: 'heisman_watch', label: '🏆 Heisman Watch', desc: 'Heisman Trophy Watch screen — replaces current candidates with the 5 shown in-game.' },
+    { id: 'team_stats',   label: '📊 Team Stats',    desc: 'EA CFB Team Stats screen (Offense or Defense tab) — saves to the Season › Team Stats view.' },
   ]
 
   // Pre-populate results from existing scan_log on mount
@@ -3753,8 +4381,7 @@ export default function App() {
             <>
               {tab === 'Dashboard' && <Dashboard  {...data} heismanCandidates={data.heismanCandidates || []} isMobile={isMobile} narrativeEntries={narrativeEntries} settings={data.settings} setTab={setTab} articles={articles} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onArticleOpen={setOpenArticle} />}
               {tab === 'Standings' && <Standings  teams={data.teams} isMobile={isMobile} settings={data.settings} />}
-              {tab === 'Season'    && <Season     games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} />}
-              {tab === 'Matchups'  && <MatchupsTab games={data.games} teams={data.teams} settings={data.settings} articles={articles} isMobile={isMobile} onArticleOpen={setOpenArticle} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
+              {tab === 'Season'    && <Season games={data.games} teams={data.teams} isMobile={isMobile} settings={data.settings} articles={articles} onArticleOpen={setOpenArticle} onArticlesChange={() => { fetchArticles(); fetchData(); }} commPin={commPin} onPinSet={pin => { setCommPin(pin); if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('dynasty_comm_pin', pin || '') }} />}
               {tab === 'Awards'    && (
                 <AwardsTab
                   heismanCandidates={data.heismanCandidates || []}
