@@ -1120,7 +1120,7 @@ function Standings({ teams, isMobile, settings }) {
   const PLAYOFF_LINE = 4
 
   // ── AP Poll view ───────────────────────────────────
-  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (a.rank || 99) - (b.rank || 99))
+  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (b.points || 0) - (a.points || 0))
 
   return (
     <div>
@@ -1172,10 +1172,12 @@ function Standings({ teams, isMobile, settings }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {apRankings.map((entry, i) => (
-                    <tr key={entry.rank ?? i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
+                  {apRankings.map((entry, i) => {
+                    const displayRank = i + 1
+                    return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', width: 52 }}>
-                        <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: entry.rank <= 5 ? C.accent : entry.rank <= 10 ? C.text : C.muted, fontWeight: 700 }}>{entry.rank}</span>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: displayRank <= 5 ? C.accent : displayRank <= 10 ? C.text : C.muted, fontWeight: 700 }}>{displayRank}</span>
                       </td>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1186,7 +1188,7 @@ function Standings({ teams, isMobile, settings }) {
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{entry.record || '—'}</td>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontSize: 12 }}>{entry.points != null ? entry.points : '—'}</td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
