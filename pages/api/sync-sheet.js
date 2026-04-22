@@ -167,8 +167,11 @@ TEAM NAME RULES:
     messages:   [{ role: 'user', content: prompt }],
   })
 
-  const text   = response.content[0].text.replace(/```json|```/g, '').trim()
-  const parsed = JSON.parse(text)
+  const raw    = response.content[0].text
+  const stripped = raw.replace(/```json|```/g, '').trim()
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('No JSON in AI response: ' + stripped.slice(0, 200))
+  const parsed = JSON.parse(jsonMatch[0])
   parsed.source = 'sheet_auto_sync'
   return parsed
 }

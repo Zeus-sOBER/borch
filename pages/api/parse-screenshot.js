@@ -9,6 +9,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ─── Robust JSON extractor ───────────────────────────────────────────────────
+// Strips markdown fences and any preamble text, then grabs the first {...} block.
+// Prevents JSON.parse failures when Claude adds an explanation before the JSON.
+function extractJson(rawText) {
+  const stripped = rawText.replace(/```json|```/g, '').trim();
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found in AI response: ' + stripped.slice(0, 200));
+  return JSON.parse(match[0]);
+}
+
 // ─── CFB Schedule Context ────────────────────────────────────────────────────
 // Used to help AI understand what week means what phase of the season
 const CFB_SCHEDULE_CONTEXT = `
@@ -37,7 +47,8 @@ function getGoogleAuth() {
     credentials,
     scopes: [
       'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/documents.readonly'
+      'https://www.googleapis.com/auth/documents.readonly',
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
     ]
   });
 }
@@ -56,16 +67,41 @@ async function fetchGoogleDocText(fileId) {
 }
 
 // ─── Fetch Google Sheet as CSV text ──────────────────────────────────────────
-async function fetchGoogleSheetAsCsv(fileId) {
+// Uses the Sheets API so we can target a specific tab by gid.
+// Falls back to the first tab if the gid isn't found.
+async function fetchGoogleSheetAsCsv(fileId, gid) {
   const auth = getGoogleAuth();
-  const drive = google.drive({ version: 'v3', auth });
+  const sheets = google.sheets({ version: 'v4', auth });
 
-  // Export the first sheet as CSV
-  const res = await drive.files.export(
-    { fileId, mimeType: 'text/csv' },
-    { responseType: 'text' }
-  );
-  return res.data;
+  // Resolve gid → tab name
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+  const allSheets = meta.data.sheets || [];
+
+  let sheetName;
+  if (gid != null) {
+    const match = allSheets.find(s => s.properties.sheetId === Number(gid));
+    sheetName = match?.properties?.title;
+  }
+  // Also try names that look like a schedule if no gid match
+  if (!sheetName) {
+    const scheduleNames = ['schedule', 'dynasty schedule', 'games', 'matchups'];
+    const nameMatch = allSheets.find(s =>
+      scheduleNames.includes(s.properties.title?.toLowerCase())
+    );
+    sheetName = nameMatch?.properties?.title;
+  }
+  // Final fallback: first tab
+  if (!sheetName) sheetName = allSheets[0]?.properties?.title;
+
+  const valuesRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: fileId,
+    range: sheetName,
+  });
+
+  const rows = valuesRes.data.values || [];
+  return rows
+    .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
 }
 
 // ─── Fetch image from Drive as base64 ────────────────────────────────────────
@@ -121,7 +157,9 @@ export default async function handler(req, res) {
 
     if (isGoogleSheet) {
       // ── GOOGLE SHEET → always treated as schedule import ─────────────────
-      const sheetCsv = await fetchGoogleSheetAsCsv(fileId);
+      // Pass the known dynasty schedule gid so we hit the right tab
+      const dynastyGid = process.env.DYNASTY_SHEET_GID || '482403615';
+      const sheetCsv = await fetchGoogleSheetAsCsv(fileId, dynastyGid);
       parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams);
     } else if (isScheduleImport && isGoogleDoc) {
       // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
@@ -272,8 +310,7 @@ TEAM NAME RULES (apply consistently):
     messages: [{ role: 'user', content: prompt }]
   });
 
-  const text = response.content[0].text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(text);
+  const parsed = extractJson(response.content[0].text);
   parsed.source = 'schedule_doc';
   return parsed;
 }
@@ -338,8 +375,7 @@ Rules:
     }]
   });
 
-  const text = response.content[0].text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(text);
+  const parsed = extractJson(response.content[0].text);
   parsed.source = 'schedule_image';
   return parsed;
 }
@@ -404,8 +440,7 @@ Match team names to the known human coaches where possible.`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  const text = response.content[0].text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(text);
+  const parsed = extractJson(response.content[0].text);
   parsed.source = 'gdoc';
   return parsed;
 }
@@ -529,8 +564,7 @@ Only include arrays that have actual extracted data.`;
     }]
   });
 
-  const text = response.content[0].text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(text);
+  const parsed = extractJson(response.content[0].text);
   parsed.source = 'image';
   return parsed;
 }
