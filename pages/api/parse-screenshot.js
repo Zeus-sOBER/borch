@@ -184,7 +184,7 @@ export default async function handler(req, res) {
     }
 
     // Save results to Supabase
-    const saveResult = await saveToSupabase(parsedResult, coaches, humanTeams);
+    const saveResult = await saveToSupabase(parsedResult, coaches, humanTeams, currentSeason);
 
     // ── Log to Narrative Hub ────────────────────────────────────────────────
     await logParsedResultToNarrative(parsedResult, coaches, humanTeams);
@@ -846,7 +846,7 @@ Respond with ONLY valid JSON:
 }
 
 // ─── Save Parsed Data to Supabase ─────────────────────────────────────────────
-async function saveToSupabase(data, coaches, humanTeams) {
+async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
   const saved = { games: 0, players: 0, standings: 0, championship: false, recruiting: 0, rankings: 0, heisman: 0, team_stats: 0 };
 
   // Helper: find coach name for a team
