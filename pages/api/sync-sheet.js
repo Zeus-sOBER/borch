@@ -174,8 +174,26 @@ TEAM NAME RULES:
 }
 
 // ─── Save / upsert games ──────────────────────────────────────────────────────
+// Fetches all existing games for the season upfront, then matches locally
+// using normalized team names. This avoids the fragile PostgREST .or(ilike)
+// syntax that breaks on team names with spaces or parentheses (e.g. "Miami (OH)").
 async function saveGames(games, season) {
   if (!games || games.length === 0) return { upserted: 0, errors: 0 }
+
+  // Fetch all existing games for this season in one query
+  const { data: existingGames } = await supabase
+    .from('games')
+    .select('id, week, home_team, away_team, is_final')
+    .eq('season', season)
+
+  // Build a lookup map: "week|teamA|teamB" → row (teams sorted so order doesn't matter)
+  const norm  = (s) => (s || '').toLowerCase().trim()
+  const makeKey = (week, t1, t2) => `${week}|${[norm(t1), norm(t2)].sort().join('|')}`
+
+  const existingMap = {}
+  for (const row of existingGames || []) {
+    existingMap[makeKey(row.week, row.home_team, row.away_team)] = row
+  }
 
   let upserted = 0
   let errors   = 0
@@ -183,16 +201,11 @@ async function saveGames(games, season) {
   for (const game of games) {
     if (!game.home_team || !game.away_team) continue
 
-    // Try to match existing game first (same teams + week + season)
-    const { data: existing } = await supabase
-      .from('games')
-      .select('id, is_final')
-      .eq('season', season)
-      .eq('week', game.week)
-      .or(`and(home_team.ilike.${game.home_team},away_team.ilike.${game.away_team}),and(home_team.ilike.${game.away_team},away_team.ilike.${game.home_team})`)
-      .maybeSingle()
+    const week    = game.week ?? 0
+    const key     = makeKey(week, game.home_team, game.away_team)
+    const existing = existingMap[key]
 
-    // Don't overwrite a finalised game with a non-final row
+    // Never overwrite a finalized game with a non-final (scheduled) row
     if (existing?.is_final && !game.is_final) {
       upserted++
       continue
@@ -200,7 +213,7 @@ async function saveGames(games, season) {
 
     const row = {
       season,
-      week:       game.week ?? 0,
+      week,
       home_team:  game.home_team,
       away_team:  game.away_team,
       home_score: game.is_final ? (game.home_score ?? null) : null,
@@ -215,7 +228,10 @@ async function saveGames(games, season) {
     if (existing) {
       ;({ error: err } = await supabase.from('games').update(row).eq('id', existing.id))
     } else {
-      ;({ error: err } = await supabase.from('games').insert(row))
+      ;({ error: err } = await supabase.from('games').upsert(
+        { ...row },
+        { onConflict: 'home_team,away_team,week,season' }
+      ))
     }
 
     if (err) {

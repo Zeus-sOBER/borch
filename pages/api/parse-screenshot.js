@@ -840,16 +840,32 @@ async function saveToSupabase(data, coaches, humanTeams) {
       if (isFinal) hasFinalGames = true;
       const homeTeam = normalizeTeamName(game.home_team);
       const awayTeam = normalizeTeamName(game.away_team);
+      const gameSeason = game.season ?? data.season ?? currentSeason;
+
+      // Don't overwrite a finalised game with a non-final (scheduled) row
+      if (!isFinal) {
+        const { data: existing } = await supabase
+          .from('games')
+          .select('id, is_final')
+          .eq('season', gameSeason)
+          .eq('week', game.week ?? data.week ?? 0)
+          .eq('home_team', homeTeam)
+          .eq('away_team', awayTeam)
+          .maybeSingle();
+        if (existing?.is_final) { saved.games++; continue; }
+      }
+
       const { error } = await supabase.from('games').upsert({
         home_team:  homeTeam,
         away_team:  awayTeam,
+        season:     gameSeason,
         home_score: hasRealScores ? homeScore : null,
         away_score: hasRealScores ? awayScore : null,
         week:       game.week ?? data.week ?? null,
         is_final:   isFinal,
         game_type:  game.game_type ?? 'regular',
         notes:      game.notes     ?? null,
-      }, { onConflict: 'home_team,away_team,week' });
+      }, { onConflict: 'home_team,away_team,week,season' });
       if (!error) saved.games++;
     }
 
