@@ -48,7 +48,7 @@ function getGoogleAuth() {
     scopes: [
       'https://www.googleapis.com/auth/drive.readonly',
       'https://www.googleapis.com/auth/documents.readonly',
-      'https://www.googleapis.com/auth/spreadsheets.readonly',
+      'https://www.googleapis.com/auth/spreadsheets',
     ]
   });
 }
@@ -67,41 +67,28 @@ async function fetchGoogleDocText(fileId) {
 }
 
 // ─── Fetch Google Sheet as CSV text ──────────────────────────────────────────
-// Uses the Sheets API so we can target a specific tab by gid.
-// Falls back to the first tab if the gid isn't found.
+// Uses a direct authenticated request to Google's CSV export endpoint so we
+// can target a specific tab by gid without needing the Sheets API separately.
 async function fetchGoogleSheetAsCsv(fileId, gid) {
   const auth = getGoogleAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
+  const client = await auth.getClient();
+  const tokenRes = await client.getAccessToken();
+  const token = tokenRes.token;
 
-  // Resolve gid → tab name
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: fileId });
-  const allSheets = meta.data.sheets || [];
+  const url = gid != null
+    ? `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv&gid=${gid}`
+    : `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv`;
 
-  let sheetName;
-  if (gid != null) {
-    const match = allSheets.find(s => s.properties.sheetId === Number(gid));
-    sheetName = match?.properties?.title;
-  }
-  // Also try names that look like a schedule if no gid match
-  if (!sheetName) {
-    const scheduleNames = ['schedule', 'dynasty schedule', 'games', 'matchups'];
-    const nameMatch = allSheets.find(s =>
-      scheduleNames.includes(s.properties.title?.toLowerCase())
-    );
-    sheetName = nameMatch?.properties?.title;
-  }
-  // Final fallback: first tab
-  if (!sheetName) sheetName = allSheets[0]?.properties?.title;
-
-  const valuesRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: fileId,
-    range: sheetName,
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
   });
 
-  const rows = valuesRes.data.values || [];
-  return rows
-    .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Sheet export failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+
+  return await res.text();
 }
 
 // ─── Fetch image from Drive as base64 ────────────────────────────────────────
