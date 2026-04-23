@@ -1122,6 +1122,14 @@ function Standings({ teams, isMobile, settings }) {
   // ── AP Poll view ───────────────────────────────────
   const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (b.points || 0) - (a.points || 0))
 
+  // Build a live record lookup from the teams array so the AP poll always
+  // shows current W-L rather than the stale record from the screenshot.
+  const liveRecordMap = {}
+  for (const t of teams) {
+    const key = (t.name || t.team_name || '').toLowerCase().trim()
+    if (key) liveRecordMap[key] = `${t.wins ?? 0}-${t.losses ?? 0}`
+  }
+
   return (
     <div>
       {/* Header + view toggle */}
@@ -1174,6 +1182,8 @@ function Standings({ teams, isMobile, settings }) {
                 <tbody>
                   {apRankings.map((entry, i) => {
                     const displayRank = i + 1
+                    const teamKey = (entry.team_name || '').toLowerCase().trim()
+                    const liveRecord = liveRecordMap[teamKey] || entry.record || '—'
                     return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', width: 52 }}>
@@ -1185,7 +1195,7 @@ function Standings({ teams, isMobile, settings }) {
                           <span style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{entry.team_name}</span>
                         </div>
                       </td>
-                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{entry.record || '—'}</td>
+                      <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 13 }}>{liveRecord}</td>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', color: C.muted, fontSize: 12 }}>{entry.points != null ? entry.points : '—'}</td>
                     </tr>
                   )})}
