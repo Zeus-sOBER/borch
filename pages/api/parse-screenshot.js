@@ -207,14 +207,18 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Parse error:', error);
 
-    await supabase.from('scan_log').insert({
-      file_id:        fileId,
-      file_name:      fileName || fileId,
-      data_type:      'error',
-      records_parsed: 0,
-    }).catch(() => {});
+    try {
+      await supabase.from('scan_log').insert({
+        file_id:        fileId,
+        file_name:      fileName || fileId,
+        data_type:      'error',
+        records_parsed: 0,
+      });
+    } catch (_) {}
 
-    res.status(500).json({ error: 'Failed to parse file', details: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to parse file', details: error.message });
+    }
   }
 
   } catch (outerError) {

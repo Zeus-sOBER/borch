@@ -87,12 +87,14 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[sync-sheet] error:', err)
-    await supabase.from('scan_log').insert({
-      file_id:        sheetId,
-      file_name:      'Dynasty_Schedule_Template (auto-sync)',
-      data_type:      'error',
-      records_parsed: 0,
-    }).catch(() => {})
+    try {
+      await supabase.from('scan_log').insert({
+        file_id:        sheetId,
+        file_name:      'Dynasty_Schedule_Template (auto-sync)',
+        data_type:      'error',
+        records_parsed: 0,
+      })
+    } catch (_) {}
     return res.status(500).json({ error: 'Sync failed', details: err.message })
   }
 }
