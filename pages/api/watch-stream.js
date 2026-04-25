@@ -96,7 +96,8 @@ Return this exact structure (use null for fields you cannot determine):
 
     const { createClient } = await import('@supabase/supabase-js')
     const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-    const season = 1
+    const { data: settingsRow } = await db.from('league_settings').select('current_season').eq('id', 1).single()
+    const season = settingsRow?.current_season ?? 1
     const now = new Date().toISOString()
 
     await db.from('stream_events').insert({

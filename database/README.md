@@ -1,42 +1,25 @@
-# Database Files — Supabase
+# Database — Supabase Setup
 
-All SQL files for setting up and updating the Dynasty Universe database.
+## Quick Start (New Leagues)
 
-## Initial Setup (Run in this order)
+Run **one file** to set up everything:
 
-These three files must be run first to create the core database structure:
+**`dynasty-universe-complete.sql`**
 
-1. **supabase-schema.sql** — Core tables (teams, leagues, standings, player stats)
-2. **supabase-schema-stream.sql** — Stream watching tables (moments, recruiting, events)
-3. **supabase-schema-coaches.sql** — Coach profiles and achievements
+This single file creates all 15+ tables, columns, indexes, RLS policies, and seed data. It's fully idempotent — safe to run multiple times without breaking anything.
 
-Run each one in Supabase SQL Editor, one at a time.
+### How to Run
 
-## Feature Schemas (Optional)
-
-These add additional tables for specific features:
-
-- **supabase-schema-mascot.sql** — Team mascot data (optional)
-- **supabase-schema-narrative.sql** — Dynasty narrative & storylines (optional)
-
-## Migrations (Applied to existing databases)
-
-These files update existing databases with new features. Run in order if updating an existing database:
-
-1. supabase-migration-games-v2.sql
-2. supabase-migration-team-id.sql
-3. supabase-migration-league-settings.sql
-4. supabase-migration-featured-game.sql
-5. supabase-migration-ap-poll.sql
-6. supabase-migration-logo-overrides.sql
-7. supabase-migration-fix-featured-game-type.sql
-
-## How to Run
-
-1. Go to **Supabase → SQL Editor**
+1. Go to your Supabase project → **SQL Editor**
 2. Click **New Query**
-3. Copy-paste the entire contents of the SQL file
+3. Copy-paste the entire contents of `dynasty-universe-complete.sql`
 4. Click **Run**
-5. Wait for success confirmation
+5. Done — your database is ready
 
-**Do not run multiple files at once** — run them one at a time in order.
+## Legacy Migration Files
+
+The individual `supabase-schema-*.sql` and `supabase-migration-*.sql` files are the original incremental migrations that were used during development. They've all been merged into the complete file above. They're kept here for git history reference but **you don't need to touch them** — just use `dynasty-universe-complete.sql`.
+
+## Tables Created
+
+teams, games, players, coaches, scan_log, league_settings, narrative_log, championships, heisman_watch, ap_rankings, team_stats, articles, stream_events, big_moments, recruiting_events

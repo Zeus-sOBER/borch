@@ -216,6 +216,7 @@ const ALL_NAV_ITEMS = [
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Awards',    icon: '🏆', label: 'Awards' },
   { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
+  { id: 'Timeline',  icon: '📜', label: 'Timeline', href: '/timeline' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
 
@@ -4481,7 +4482,7 @@ export default function App() {
             {!isMobile && (
               <>
                 <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
-                <button onClick={() => setTab('Awards')} style={{ background: 'none', border: 'none', color: tab === 'Awards' ? C.accent : C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, cursor: 'pointer', whiteSpace: 'nowrap', padding: 0 }}>🏆 AWARDS</button>
+                <a href="/timeline" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📜 TIMELINE</a>
                 <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
               </>
             )}
