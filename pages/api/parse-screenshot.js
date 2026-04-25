@@ -147,10 +147,17 @@ export default async function handler(req, res) {
 
     if (isGoogleSheet) {
       // ── GOOGLE SHEET → always treated as schedule import ─────────────────
-      // Pass the known dynasty schedule gid so we hit the right tab
+      // Fetch already-finalized games so Claude skips them (saves tokens + avoids re-parsing)
+      const { data: finalizedRows } = await supabase
+        .from('games')
+        .select('week, home_team, away_team')
+        .eq('season', currentSeason)
+        .eq('is_final', true);
+      const finalizedGames = finalizedRows || [];
+
       const dynastyGid = process.env.DYNASTY_SHEET_GID || '482403615';
       const sheetCsv = await fetchGoogleSheetAsCsv(fileId, dynastyGid);
-      parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams);
+      parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams, finalizedGames);
     } else if (isScheduleImport && isGoogleDoc) {
       // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
       const docText = await fetchGoogleDocText(fileId);
@@ -231,14 +238,23 @@ export default async function handler(req, res) {
 }
 
 // ─── Parse a Schedule Doc (Google Doc or Sheet) ──────────────────────────────
-async function parseScheduleDoc(docText, coaches, humanTeams) {
+// finalizedGames: array of { week, home_team, away_team } already locked in DB.
+// Claude will skip those rows entirely — dramatically reducing output size.
+async function parseScheduleDoc(docText, coaches, humanTeams, finalizedGames = []) {
   const coachList = coaches.map(c => `${c.name} (${c.team})`).join(', ');
+
+  // Build a compact skip-list for the prompt
+  const skipList = finalizedGames.length > 0
+    ? `\nALREADY FINALIZED IN DATABASE — SKIP THESE (do not include in output):\n` +
+      finalizedGames.map(g => `  Week ${g.week}: ${g.home_team} vs ${g.away_team}`).join('\n') +
+      `\n\nOnly output games NOT in the above list, OR scheduled games that now have a score.\n`
+    : '';
 
   const prompt = `You are importing a college football dynasty league schedule/results from a spreadsheet or document.
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
-
+${skipList}
 The document may contain BOTH upcoming scheduled games AND completed games with scores.
 You must handle both types:
 
@@ -262,13 +278,13 @@ SKIP these rows entirely:
 
 DOCUMENT CONTENT:
 ---
-${docText.substring(0, 12000)}
+${docText.substring(0, 14000)}
 ---
 
 Return ONLY a JSON object (no markdown, no explanation):
 {
   "type": "schedule",
-  "summary": "Imported X scheduled games and Y completed results",
+  "summary": "Imported X new/updated games",
   "games": [
     {
       "home_team": "Team Name",
@@ -279,16 +295,6 @@ Return ONLY a JSON object (no markdown, no explanation):
       "away_score": 3,
       "game_type": "regular",
       "notes": "Rivalry Game"
-    },
-    {
-      "home_team": "Team Name",
-      "away_team": "Team Name",
-      "week": 2,
-      "is_final": false,
-      "home_score": null,
-      "away_score": null,
-      "game_type": "regular",
-      "notes": null
     }
   ]
 }
@@ -296,10 +302,9 @@ Return ONLY a JSON object (no markdown, no explanation):
 Rules:
 - "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
 - Week 14 = "conference_championship", weeks 15-18 = playoff/bowl
-- Include ALL game rows, not just human-team games
 - Week 0 is valid — keep it as week 0
 - Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3
-- "notes": copy any text from the Notes / Bowl Game Name column verbatim (e.g. "Rivalry Game", "Heated coaches rivalry", "Armed Forces Bowl"). Set to null if the cell is empty.
+- "notes": copy any text from the Notes / Bowl Game Name column verbatim. Set null if empty.
 TEAM NAME RULES (apply consistently):
 - "University of Miami" = "Miami"   (always use just "Miami" for the Florida school)
 - "Miami University" = "Miami (OH)" (this is the Ohio school)
@@ -308,7 +313,7 @@ TEAM NAME RULES (apply consistently):
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 6000,
+    max_tokens: 8000,
     messages: [{ role: 'user', content: prompt }]
   });
 

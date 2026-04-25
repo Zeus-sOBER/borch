@@ -63,9 +63,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: 'Sheet is empty — nothing to parse' })
     }
 
-    // ── 3. Parse with AI ──────────────────────────────────────────────────────
+    // ── 3. Fetch already-finalized games so Claude skips them ────────────────
+    const { data: finalizedRows } = await supabase
+      .from('games')
+      .select('week, home_team, away_team')
+      .eq('season', currentSeason)
+      .eq('is_final', true)
+    const finalizedGames = finalizedRows || []
+
+    // ── 4. Parse with AI (only new/updated games) ─────────────────────────────
     const coachList = (coaches || []).map(c => `${c.name} (${c.team})`).join(', ') || 'No coaches loaded yet'
-    const parsedResult = await parseScheduleSheet(csvText, coaches || [], humanTeams, coachList)
+    const parsedResult = await parseScheduleSheet(csvText, coaches || [], humanTeams, coachList, finalizedGames)
 
     // ── 4. Save to Supabase ───────────────────────────────────────────────────
     const saveResult = await saveGames(parsedResult.games || [], currentSeason)
@@ -100,12 +108,18 @@ export default async function handler(req, res) {
 }
 
 // ─── AI Parser ────────────────────────────────────────────────────────────────
-async function parseScheduleSheet(csvText, coaches, humanTeams, coachList) {
+async function parseScheduleSheet(csvText, coaches, humanTeams, coachList, finalizedGames = []) {
+  const skipList = finalizedGames.length > 0
+    ? `\nALREADY FINALIZED IN DATABASE — SKIP THESE (do not include in output):\n` +
+      finalizedGames.map(g => `  Week ${g.week}: ${g.home_team} vs ${g.away_team}`).join('\n') +
+      `\n\nOnly output games NOT in the above list, OR scheduled games that now have a score.\n`
+    : ''
+
   const prompt = `You are importing a college football dynasty league schedule/results from a spreadsheet.
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
-
+${skipList}
 The spreadsheet may contain BOTH upcoming scheduled games AND completed games with scores.
 Handle both types:
 
@@ -165,7 +179,7 @@ TEAM NAME RULES:
 
   const response = await anthropic.messages.create({
     model:      'claude-sonnet-4-20250514',
-    max_tokens: 6000,
+    max_tokens: 8000,
     messages:   [{ role: 'user', content: prompt }],
   })
 
