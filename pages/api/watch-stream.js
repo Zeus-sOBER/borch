@@ -1,4 +1,9 @@
 import { logNarrativeEvent, analyzeGame } from '../../lib/narrative';
+import { notifyBigMoment } from '../../lib/discord';
+
+// Simple in-memory Twitch token cache (avoids re-fetching every scan)
+let cachedTwitchToken = null
+let twitchTokenExpiry = 0
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -74,6 +79,21 @@ Return this exact structure (use null for fields you cannot determine):
     const raw = claudeData.content?.map(c => c.text || '').join('') || ''
     const analysis = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
+    // ── Smart scan: detect menu/loading screens and skip saving ──────────
+    const menuScreenTypes = ['menu', 'cutscene', 'other']
+    if (!analysis.isGameScreen || menuScreenTypes.includes(analysis.screenType)) {
+      return res.status(200).json({
+        live: true,
+        streamTitle: streamData.title,
+        viewerCount: streamData.viewer_count,
+        thumbnailUrl: thumbUrl,
+        analysis,
+        skipped: true,
+        skipReason: `Detected ${analysis.screenType || 'non-game'} screen — no data to capture`,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
     const { createClient } = await import('@supabase/supabase-js')
     const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     const season = 1
@@ -99,6 +119,14 @@ Return this exact structure (use null for fields you cannot determine):
           home_score: analysis.game?.homeScore, away_score: analysis.game?.awayScore,
           quarter: analysis.game?.quarter, season, created_at: now,
         })
+        // Notify Discord for exciting moments
+        notifyBigMoment({
+          type: moment.type,
+          description: moment.description,
+          home_team: analysis.game?.homeTeam,
+          away_team: analysis.game?.awayTeam,
+          player: moment.player,
+        }).catch(() => {})
       }
     }
 
@@ -152,11 +180,17 @@ Return this exact structure (use null for fields you cannot determine):
 }
 
 async function getTwitchToken() {
+  // Return cached token if still valid (with 60s buffer)
+  if (cachedTwitchToken && Date.now() < twitchTokenExpiry - 60000) {
+    return cachedTwitchToken
+  }
   const r = await fetch(
     `https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`,
     { method: 'POST' }
   )
   const d = await r.json()
+  cachedTwitchToken = d.access_token
+  twitchTokenExpiry = Date.now() + (d.expires_in || 3600) * 1000
   return d.access_token
 }
 

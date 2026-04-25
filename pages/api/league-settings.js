@@ -27,22 +27,26 @@ export default async function handler(req, res) {
 
   // ── PATCH: update settings (commissioner PIN required) ───────────────────
   if (req.method === 'PATCH') {
-    const { pin, current_week, current_season, featured_article_id, hero_image_id, hero_image_mime, featured_game_id, ap_rankings, ap_poll_updated_at, logo_overrides } = req.body || {}
+    const { pin, current_week, current_season, featured_article_id, hero_image_id, hero_image_mime, featured_game_id, ap_rankings, ap_poll_updated_at, logo_overrides, league_name, league_subtitle, accent_color, discord_webhook_url } = req.body || {}
 
     if (pin !== process.env.COMMISSIONER_PIN) {
       return res.status(403).json({ error: 'Invalid commissioner PIN' })
     }
 
     const updates = { updated_at: new Date().toISOString() }
-    if (current_week        !== undefined) updates.current_week        = current_week
-    if (current_season      !== undefined) updates.current_season      = current_season
-    if (featured_article_id !== undefined) updates.featured_article_id = featured_article_id
-    if (hero_image_id       !== undefined) updates.hero_image_id       = hero_image_id
-    if (hero_image_mime     !== undefined) updates.hero_image_mime     = hero_image_mime
-    if (featured_game_id    !== undefined) updates.featured_game_id    = featured_game_id
-    if (ap_rankings         !== undefined) updates.ap_rankings         = ap_rankings
-    if (ap_poll_updated_at  !== undefined) updates.ap_poll_updated_at  = ap_poll_updated_at
-    if (logo_overrides      !== undefined) updates.logo_overrides      = logo_overrides
+    if (current_week         !== undefined) updates.current_week         = current_week
+    if (current_season       !== undefined) updates.current_season       = current_season
+    if (featured_article_id  !== undefined) updates.featured_article_id  = featured_article_id
+    if (hero_image_id        !== undefined) updates.hero_image_id        = hero_image_id
+    if (hero_image_mime      !== undefined) updates.hero_image_mime      = hero_image_mime
+    if (featured_game_id     !== undefined) updates.featured_game_id     = featured_game_id
+    if (ap_rankings          !== undefined) updates.ap_rankings          = ap_rankings
+    if (ap_poll_updated_at   !== undefined) updates.ap_poll_updated_at   = ap_poll_updated_at
+    if (logo_overrides       !== undefined) updates.logo_overrides       = logo_overrides
+    if (league_name          !== undefined) updates.league_name          = league_name
+    if (league_subtitle      !== undefined) updates.league_subtitle      = league_subtitle
+    if (accent_color         !== undefined) updates.accent_color         = accent_color
+    if (discord_webhook_url  !== undefined) updates.discord_webhook_url  = discord_webhook_url
 
     const { data, error } = await db
       .from('league_settings')

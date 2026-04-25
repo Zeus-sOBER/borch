@@ -15,6 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { getNarrativeContext, logNarrativeEvent } from '../../lib/narrative';
+import { notifyNewArticle } from '../../lib/discord';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const supabase = createClient(
@@ -708,6 +709,10 @@ REQUIREMENTS:
       content:      article,
       edited_by:    'commissioner'
     });
+
+    // ── Notify Discord ───────────────────────────────────────────────────
+    notifyNewArticle({ title, content: article, article_type: articleType })
+      .catch(err => console.error('[discord] article notify error:', err.message));
 
     // ── Log to Narrative Hub so future Claude calls build on this ─────────
     await logNarrativeEvent({

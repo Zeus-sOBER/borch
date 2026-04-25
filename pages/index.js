@@ -3129,6 +3129,11 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
   const [autoScanning, setAutoScanning] = useState(false)
   const [autoScanResult, setAutoScanResult] = useState(null)
   const [typeHint, setTypeHint] = useState('auto')
+  // In-app upload state
+  const [uploadDragging, setUploadDragging] = useState(false)
+  const [uploading, setUploading]           = useState(false)
+  const [uploadPreview, setUploadPreview]   = useState(null)
+  const [uploadResult, setUploadResult]     = useState(null)
 
   const TYPE_HINTS = [
     { id: 'auto',        label: '✨ Auto-Detect',  desc: 'Smart detection — works for any screenshot or doc' },
@@ -3230,9 +3235,62 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
 
   const unscannedCount = files.filter(f => !results[f.id]?.success).length
 
+  // ── In-app upload handlers ───────────────────────────────────
+  const handleUploadFile = async (file) => {
+    if (!file || !commPin) return
+    setUploading(true)
+    setUploadResult(null)
+    setUploadPreview(null)
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      // First: preview mode
+      const previewRes = await fetch('/api/upload-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: base64, mimeType: file.type, fileName: file.name, preview: true }),
+      })
+      const previewData = await previewRes.json()
+      setUploadPreview({ ...previewData, base64, mimeType: file.type, fileName: file.name })
+    } catch (e) {
+      setUploadResult({ error: e.message })
+    }
+    setUploading(false)
+  }
+
+  const confirmUpload = async () => {
+    if (!uploadPreview) return
+    setUploading(true)
+    try {
+      const res = await fetch('/api/upload-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: uploadPreview.base64, mimeType: uploadPreview.mimeType, fileName: uploadPreview.fileName, preview: false }),
+      })
+      const data = await res.json()
+      setUploadResult(data)
+      setUploadPreview(null)
+      if (data.success) onRefresh()
+    } catch (e) {
+      setUploadResult({ error: e.message })
+    }
+    setUploading(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setUploadDragging(false)
+    const file = e.dataTransfer?.files?.[0]
+    if (file) handleUploadFile(file)
+  }
+
   return (
     <div>
-      <SectionTitle isMobile={isMobile} sub="Pull screenshots and Google Docs from your shared Drive folder">Drive Sync</SectionTitle>
+      <SectionTitle isMobile={isMobile} sub="Upload screenshots directly or pull from Google Drive">Data Sync</SectionTitle>
 
       {/* Week Controls — commissioner only */}
       {commPin && (
@@ -3249,6 +3307,74 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
           <div style={{ color: C.subtle, fontSize: 13, fontStyle: 'italic' }}>
             🔐 Log in as commissioner (Media tab) to access week controls and season settings.
           </div>
+        </Card>
+      )}
+
+      {/* ── In-App Upload ───────────────────────────────── */}
+      {commPin && (
+        <Card style={{ marginBottom: 16, borderColor: C.blue + '33' }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.blue, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+            📤 Direct Upload
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>
+            Drop or select any CFB 26 screenshot — auto-detects the type, shows you a preview, and lets you confirm before saving.
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setUploadDragging(true) }}
+            onDragLeave={() => setUploadDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = e => handleUploadFile(e.target.files[0]); inp.click() }}
+            style={{
+              border: `2px dashed ${uploadDragging ? C.blue : C.border}`,
+              borderRadius: 10,
+              padding: isMobile ? '24px 12px' : '32px 24px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: uploadDragging ? C.blue + '08' : 'transparent',
+              transition: 'all 0.2s',
+            }}
+          >
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{uploading ? '⏳' : '📸'}</div>
+            <div style={{ color: uploading ? C.muted : C.text, fontSize: 14, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>
+              {uploading ? 'ANALYZING SCREENSHOT...' : 'DROP SCREENSHOT HERE OR CLICK TO BROWSE'}
+            </div>
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+              Supports standings, scores, stats, recruiting, AP poll, Heisman, team stats
+            </div>
+          </div>
+
+          {/* Preview panel */}
+          {uploadPreview && !uploadPreview.error && (
+            <div style={{ marginTop: 14, padding: 14, background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.green, letterSpacing: 1, marginBottom: 8 }}>
+                ✅ DETECTED: {(uploadPreview.detectedType || 'data').toUpperCase().replace(/_/g, ' ')}
+              </div>
+              {uploadPreview.preview && (
+                <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, maxHeight: 120, overflow: 'auto' }}>
+                  {typeof uploadPreview.preview === 'string' ? uploadPreview.preview : JSON.stringify(uploadPreview.preview, null, 2).substring(0, 500)}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={confirmUpload} disabled={uploading} style={{
+                  background: C.green, color: '#000', border: 'none', borderRadius: 6,
+                  padding: '10px 20px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700,
+                }}>{uploading ? '⏳ Saving...' : '✅ Confirm & Save'}</button>
+                <button onClick={() => setUploadPreview(null)} style={{
+                  background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6,
+                  padding: '10px 16px', cursor: 'pointer', fontSize: 12,
+                }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Upload result */}
+          {uploadResult && (
+            <div style={{ marginTop: 10, fontSize: 13, color: uploadResult.error ? C.red : C.green }}>
+              {uploadResult.error ? `❌ ${uploadResult.error}` : `✅ ${uploadResult.summary || 'Data saved successfully!'}`}
+            </div>
+          )}
         </Card>
       )}
 
@@ -4162,9 +4288,17 @@ function TrophyRoom({ championships = [], coaches = [], isMobile }) {
 }
 
 // ── Root App ───────────────────────────────────────────────────
+// ── Hash routing helpers ──────────────────────────────────────
+function getTabFromHash() {
+  if (typeof window === 'undefined') return 'Dashboard'
+  const hash = window.location.hash.replace('#', '')
+  const match = ALL_TABS.find(t => t.toLowerCase() === hash.toLowerCase())
+  return match || 'Dashboard'
+}
+
 export default function App() {
   const isMobile = useMobile()
-  const [tab, setTab]                   = useState('Dashboard')
+  const [tab, setTabRaw]                = useState('Dashboard')
   const [data, setData]                 = useState({ teams: [], games: [], players: [], scanLog: [], settings: { current_week: 0, current_season: 1 }, heismanCandidates: [], championships: [] })
   const [loadingData, setLoadingData]   = useState(true)
   const [commPin, setCommPin]           = useState(null)
@@ -4175,6 +4309,22 @@ export default function App() {
   const [articles, setArticles]         = useState([])
   const [openArticle, setOpenArticle]   = useState(null)
   const [logoOverrides, setLogoOverrides] = useState({})
+
+  // URL hash routing: set tab AND update hash
+  const setTab = useCallback((t) => {
+    setTabRaw(t)
+    if (typeof window !== 'undefined') {
+      window.location.hash = t === 'Dashboard' ? '' : t.toLowerCase()
+    }
+  }, [])
+
+  // Read tab from URL hash on mount + listen for back/forward
+  useEffect(() => {
+    setTabRaw(getTabFromHash())
+    const onHashChange = () => setTabRaw(getTabFromHash())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   const fetchData = useCallback(async () => {
     try {
@@ -4270,7 +4420,7 @@ export default function App() {
     <LogoCtx.Provider value={{ overrides: logoOverrides, setOverride: setLogoOverride, resetOverrides: resetLogoOverrides }}>
     <>
       <Head>
-        <title>Dynasty Universe · CFB 26</title>
+        <title>{data.settings?.league_name || 'Dynasty Universe'} · CFB 26</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
         <meta name="theme-color" content="#09090b" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -4291,10 +4441,14 @@ export default function App() {
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 1160, margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px', display: 'flex', alignItems: 'center' }}>
 
-          {/* Logo */}
+          {/* Logo — uses league branding from settings */}
           <div style={{ padding: isMobile ? '12px 12px 12px 0' : '16px 24px 16px 0', borderRight: `1px solid ${C.border}`, marginRight: isMobile ? 12 : 24, flexShrink: 0 }}>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 16 : 21, fontWeight: 700, letterSpacing: 2, color: C.accent, lineHeight: 1 }}>DYNASTY</div>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 4, color: C.muted }}>UNIVERSE</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 16 : 21, fontWeight: 700, letterSpacing: 2, color: data.settings?.accent_color || C.accent, lineHeight: 1 }}>
+              {(data.settings?.league_name || 'DYNASTY').toUpperCase()}
+            </div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 4, color: C.muted }}>
+              {(data.settings?.league_subtitle || 'UNIVERSE').toUpperCase()}
+            </div>
           </div>
 
           {/* Tabs — hidden on mobile (use bottom nav instead) */}
