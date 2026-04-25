@@ -147,7 +147,28 @@ export default async function handler(req, res) {
 
     if (isGoogleSheet) {
       // ── GOOGLE SHEET → always treated as schedule import ─────────────────
-      // Fetch already-finalized games so Claude skips them (saves tokens + avoids re-parsing)
+      const dynastyGid = process.env.DYNASTY_SHEET_GID || '482403615';
+      const sheetCsv = await fetchGoogleSheetAsCsv(fileId, dynastyGid);
+
+      // ── Content-hash cache: skip Claude if sheet hasn't changed ──────────
+      const crypto = await import('crypto');
+      const csvHash = crypto.createHash('sha256').update(sheetCsv).digest('hex');
+
+      const { data: settings } = await supabase
+        .from('league_settings').select('sheet_csv_hash').eq('id', 1).single();
+
+      if (settings?.sheet_csv_hash === csvHash) {
+        // Sheet is identical to last scan — nothing to do
+        return res.status(200).json({
+          success: true,
+          detectedType: 'schedule',
+          summary: 'Sheet unchanged since last scan — skipped ✓',
+          saved: { games: 0 },
+          cached: true,
+        });
+      }
+
+      // Fetch already-finalized games so Claude skips them (saves output tokens)
       const { data: finalizedRows } = await supabase
         .from('games')
         .select('week, home_team, away_team')
@@ -155,9 +176,9 @@ export default async function handler(req, res) {
         .eq('is_final', true);
       const finalizedGames = finalizedRows || [];
 
-      const dynastyGid = process.env.DYNASTY_SHEET_GID || '482403615';
-      const sheetCsv = await fetchGoogleSheetAsCsv(fileId, dynastyGid);
       parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams, finalizedGames);
+      // Store the new hash so the next identical scan is skipped
+      parsedResult._csvHash = csvHash;
     } else if (isScheduleImport && isGoogleDoc) {
       // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
       const docText = await fetchGoogleDocText(fileId);
@@ -182,6 +203,13 @@ export default async function handler(req, res) {
 
     // Save results to Supabase
     const saveResult = await saveToSupabase(parsedResult, coaches, humanTeams, currentSeason);
+
+    // ── Persist content hash so identical re-scans are skipped ──────────────
+    if (parsedResult._csvHash) {
+      await supabase.from('league_settings')
+        .update({ sheet_csv_hash: parsedResult._csvHash })
+        .eq('id', 1);
+    }
 
     // ── Log to Narrative Hub ────────────────────────────────────────────────
     await logParsedResultToNarrative(parsedResult, coaches, humanTeams);
