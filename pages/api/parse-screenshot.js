@@ -110,9 +110,12 @@ async function fetchDriveImageAsBase64(fileId) {
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  // Outermost guard — always returns JSON, never lets Next.js render an HTML error page
+  try {
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { fileId, fileName, mimeType: inputMimeType, typeHint } = req.body;
+  const { fileId, fileName, mimeType: inputMimeType, typeHint } = req.body || {};
 
   if (!fileId) return res.status(400).json({ error: 'fileId is required' });
 
@@ -212,6 +215,14 @@ export default async function handler(req, res) {
     }).catch(() => {});
 
     res.status(500).json({ error: 'Failed to parse file', details: error.message });
+  }
+
+  } catch (outerError) {
+    // Catch anything that slipped past the inner try (e.g. req.body issues, import errors)
+    console.error('[parse-screenshot] OUTER catch:', outerError);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Unexpected server error', details: outerError.message });
+    }
   }
 }
 

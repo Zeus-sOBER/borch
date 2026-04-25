@@ -3319,9 +3319,12 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
 
       <div style={{ display: 'grid', gap: 10 }}>
         {files.map(file => {
-          const result    = results[file.id]
-          const isParsing = parsing === file.id
-          const isDoc     = file.mimeType === 'application/vnd.google-apps.document'
+          const result      = results[file.id]
+          const isParsing   = parsing === file.id
+          const isDoc       = file.mimeType === 'application/vnd.google-apps.document'
+          const isSheet     = file.mimeType === 'application/vnd.google-apps.spreadsheet'
+          const fileIcon    = isDoc ? '📄' : isSheet ? '📊' : '🖼️'
+          const fileLabel   = isDoc ? 'Google Doc' : isSheet ? 'Spreadsheet' : 'Image'
           const savedSummary = getSavedSummary(result)
 
           return (
@@ -3332,11 +3335,11 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
               gap: 14,
             }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 28, flexShrink: 0 }}>{isDoc ? '📄' : '🖼️'}</div>
+                <div style={{ fontSize: 28, flexShrink: 0 }}>{fileIcon}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: C.text, fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
                   <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
-                    {isDoc ? 'Google Doc' : 'Image'} · {new Date(file.createdTime).toLocaleString()}
+                    {fileLabel} · {new Date(file.createdTime).toLocaleString()}
                   </div>
                   {result?.success && (
                     <div style={{ marginTop: 5 }}>
