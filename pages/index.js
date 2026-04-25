@@ -1121,14 +1121,47 @@ function Standings({ teams, isMobile, settings }) {
   const PLAYOFF_LINE = 4
 
   // ── AP Poll view ───────────────────────────────────
-  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (b.points || 0) - (a.points || 0))
+  // Sort by the actual stored rank number (ascending), not by points
+  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (a.rank || 999) - (b.rank || 999))
 
   // Build a live record lookup from the teams array so the AP poll always
   // shows current W-L rather than the stale record from the screenshot.
+  // We also register common name aliases so e.g. "Miami University" (in ap_rankings)
+  // can find "Miami (OH)" (in teams table) — a known mismatch from the screenshot parser.
+  const AP_NAME_ALIASES = {
+    'miami university': 'miami (oh)',
+    'miami ohio': 'miami (oh)',
+    'miami oh': 'miami (oh)',
+    'university of miami': 'miami',
+    'miami fl': 'miami',
+    'miami (fl)': 'miami',
+    'miami florida': 'miami',
+    'ole miss': 'mississippi',
+    'usc': 'southern california',
+    'byu': 'brigham young',
+    'ucf': 'central florida',
+    'uab': 'alabama-birmingham',
+    'fsu': 'florida state',
+    'pitt': 'pittsburgh',
+    'unc': 'north carolina',
+    'cal': 'california',
+  }
   const liveRecordMap = {}
   for (const t of teams) {
     const key = (t.name || t.team_name || '').toLowerCase().trim()
     if (key) liveRecordMap[key] = `${t.wins ?? 0}-${t.losses ?? 0}`
+  }
+  // Helper: look up live record, trying aliases if direct match fails
+  function getLiveRecord(teamName, fallback) {
+    const key = (teamName || '').toLowerCase().trim()
+    if (liveRecordMap[key]) return liveRecordMap[key]
+    const alias = AP_NAME_ALIASES[key]
+    if (alias && liveRecordMap[alias]) return liveRecordMap[alias]
+    // Last resort: partial match (e.g. "Texas A&M" matching "texas a&m")
+    for (const [k, v] of Object.entries(liveRecordMap)) {
+      if (k.includes(key) || key.includes(k)) return v
+    }
+    return fallback || '—'
   }
 
   return (
@@ -1182,9 +1215,8 @@ function Standings({ teams, isMobile, settings }) {
                 </thead>
                 <tbody>
                   {apRankings.map((entry, i) => {
-                    const displayRank = i + 1
-                    const teamKey = (entry.team_name || '').toLowerCase().trim()
-                    const liveRecord = liveRecordMap[teamKey] || entry.record || '—'
+                    const displayRank = entry.rank || (i + 1)
+                    const liveRecord = getLiveRecord(entry.team_name, entry.record)
                     return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>
                       <td style={{ padding: isMobile ? '10px 10px' : '13px 16px', textAlign: 'center', width: 52 }}>
