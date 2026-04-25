@@ -3350,7 +3350,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
                       <span style={{ color: C.green, fontSize: 12 }}> — {savedSummary}</span>
                     </div>
                   )}
-                  {result?.error && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}</div>}
+                  {result?.error && <div style={{ color: C.red, fontSize: 12, marginTop: 4 }}>❌ {result.error}{result.details ? `: ${result.details}` : ''}</div>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignSelf: isMobile ? 'stretch' : 'center', flexDirection: isMobile ? 'column' : 'row' }}>
