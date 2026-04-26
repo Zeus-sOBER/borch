@@ -3288,14 +3288,14 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
-      // First: preview mode
+      // First: preview mode — pass typeHint so AP poll uploads use the right parser
       const previewRes = await fetch('/api/upload-screenshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64, mimeType: file.type, fileName: file.name, preview: true }),
+        body: JSON.stringify({ imageData: base64, mimeType: file.type, fileName: file.name, preview: true, typeHint: typeHint !== 'auto' ? typeHint : undefined }),
       })
       const previewData = await previewRes.json()
-      setUploadPreview({ ...previewData, base64, mimeType: file.type, fileName: file.name })
+      setUploadPreview({ ...previewData, base64, mimeType: file.type, fileName: file.name, typeHint: typeHint !== 'auto' ? typeHint : undefined })
     } catch (e) {
       setUploadResult({ error: e.message })
     }
@@ -3309,7 +3309,7 @@ function DriveSync({ onRefresh, existingScanLog, isMobile, settings, commPin, on
       const res = await fetch('/api/upload-screenshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: uploadPreview.base64, mimeType: uploadPreview.mimeType, fileName: uploadPreview.fileName, preview: false }),
+        body: JSON.stringify({ imageData: uploadPreview.base64, mimeType: uploadPreview.mimeType, fileName: uploadPreview.fileName, preview: false, typeHint: uploadPreview.typeHint }),
       })
       const data = await res.json()
       setUploadResult(data)

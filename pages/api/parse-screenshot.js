@@ -1045,8 +1045,8 @@ async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
   // Save AP Poll → dedicated ap_rankings table (editable row-by-row in Supabase)
   if (data.type === 'ap_poll' && data.rankings?.length > 0) {
     const season = data.season ?? 1;
-    // Delete existing entries for this season then re-insert so rank order is clean
-    await supabase.from('ap_rankings').delete().eq('season', season);
+    // UPSERT by season+rank — DO NOT delete first, so two-screenshot uploads merge:
+    // screenshot 1 (ranks 1-14) + screenshot 2 (ranks 15-25) both survive.
     for (const e of data.rankings) {
       if (!e.team_name || e.rank == null) continue;
       const { error } = await supabase.from('ap_rankings').upsert({
