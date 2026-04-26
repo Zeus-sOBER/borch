@@ -120,11 +120,22 @@ function winPct(w, l) {
 }
 
 // ── Coach Card (summary view) ──────────────────────────────────
-function CoachCard({ coach, onSelect, isCommissioner, championships = [] }) {
+function CoachCard({ coach, onSelect, isCommissioner, championships = [], teams = [], currentSeason = 1 }) {
   const achievements = coach.achievements || []
-  const latestSeason = (coach.season_records || []).slice(-1)[0]
   const accentColor  = coach.team_color || C.accent
   const coachChamps  = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
+
+  // Prefer live season record from teams table (source of truth) over manually-stored season_records.
+  // The teams table is populated by "Recalculate Standings" and reflects actual game results.
+  const coachTeamKey = (coach.team || '').toLowerCase().trim()
+  const liveTeam = teams.find(t => (t.name || '').toLowerCase().trim() === coachTeamKey)
+  const liveSeasonW = liveTeam?.wins ?? null
+  const liveSeasonL = liveTeam?.losses ?? null
+  const hasLiveRecord = liveTeam != null && (liveSeasonW > 0 || liveSeasonL > 0)
+  // Fall back to manually-stored season_records if no live data
+  const latestSeason = hasLiveRecord
+    ? { season: currentSeason, wins: liveSeasonW, losses: liveSeasonL }
+    : (coach.season_records || []).slice(-1)[0]
 
   return (
     <Card onClick={() => onSelect(coach)} style={{ position: 'relative', borderColor: coach.team_color ? coach.team_color + '55' : C.border }}>
@@ -835,6 +846,7 @@ export default function CoachesPage() {
   const isMobile = useMobile()
   const [coaches,     setCoaches]     = useState([])
   const [teams,       setTeams]       = useState([])   // all teams from DB
+  const [currentSeason, setCurrentSeason] = useState(1) // current season number
   const [loading,     setLoading]     = useState(true)
   const [selected,    setSelected]    = useState(null)
   const [showAdd,     setShowAdd]     = useState(false)
@@ -855,6 +867,7 @@ export default function CoachesPage() {
     setCoaches(coachData.coaches || [])
     setTeams(teamData.teams || [])
     setChampionships(teamData.championships || [])
+    setCurrentSeason(teamData.settings?.current_season ?? 1)
     setLoading(false)
   }, [])
 
@@ -975,7 +988,7 @@ export default function CoachesPage() {
             : (
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: isMobile ? 10 : 16 }}>
                 {shown.map(c => (
-                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} />
+                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} teams={teams} currentSeason={currentSeason} />
                 ))}
               </div>
             )

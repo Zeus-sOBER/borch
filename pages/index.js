@@ -1146,20 +1146,27 @@ function Standings({ teams, isMobile, settings }) {
     'unc': 'north carolina',
     'cal': 'california',
   }
+  // Only store live records for teams that actually have game data (wins+losses > 0).
+  // Teams with 0-0 in the teams table just haven't played anyone we've tracked yet —
+  // don't override the screenshot record with a fake 0-0.
   const liveRecordMap = {}
   for (const t of teams) {
     const key = (t.name || t.team_name || '').toLowerCase().trim()
-    if (key) liveRecordMap[key] = `${t.wins ?? 0}-${t.losses ?? 0}`
+    const hasGames = (t.wins || 0) + (t.losses || 0) > 0
+    if (key && hasGames) liveRecordMap[key] = `${t.wins ?? 0}-${t.losses ?? 0}`
   }
-  // Helper: look up live record, trying aliases if direct match fails
+  // Helper: look up live record, trying aliases if direct match fails.
+  // Falls back to the screenshot record if the team has no game data in our system.
   function getLiveRecord(teamName, fallback) {
     const key = (teamName || '').toLowerCase().trim()
     if (liveRecordMap[key]) return liveRecordMap[key]
     const alias = AP_NAME_ALIASES[key]
     if (alias && liveRecordMap[alias]) return liveRecordMap[alias]
-    // Last resort: partial match (e.g. "Texas A&M" matching "texas a&m")
-    for (const [k, v] of Object.entries(liveRecordMap)) {
-      if (k.includes(key) || key.includes(k)) return v
+    // Partial match — only if the team name is long enough to avoid false matches
+    if (key.length > 5) {
+      for (const [k, v] of Object.entries(liveRecordMap)) {
+        if (k.length > 5 && (k.includes(key) || key.includes(k))) return v
+      }
     }
     return fallback || '—'
   }
