@@ -152,35 +152,79 @@ export default async function handler(req, res) {
     const { data: allTeamStats } = await supabase
       .from('team_stats').select('*').eq('season', currentSeason)
       .order('ppg', { ascending: false, nullsFirst: false });
-    const teamStatsRows = (allTeamStats || []).filter(s =>
-      humanTeams.some(ht => ht.toLowerCase() === s.team_name?.toLowerCase())
-    );
-    const teamStatsSummary = teamStatsRows.length > 0
+
+    // Build a live PPG/DPPG lookup from the teams table — computed directly from
+    // pts and pts_against so the AI always uses current game data, not stale screenshots.
+    const livePpgMap = {};
+    for (const t of (allTeams || [])) {
+      const name = (t.name || t.team_name || '').toLowerCase().trim();
+      const gp = (t.wins || 0) + (t.losses || 0);
+      if (name && gp > 0) {
+        livePpgMap[name] = {
+          ppg:  Math.round(((t.pts         || 0) / gp) * 10) / 10,
+          dppg: Math.round(((t.pts_against || 0) / gp) * 10) / 10,
+          gp,
+        };
+      }
+    }
+
+    // Merge: team_stats rows get live PPG/DPPG overrides; teams with no stats row
+    // get a synthetic row built purely from game results.
+    const mergedStatsRows = humanTeams.map(ht => {
+      const htKey = ht.toLowerCase().trim();
+      const statsRow = (allTeamStats || []).find(s => s.team_name?.toLowerCase().trim() === htKey) || {};
+      const live     = livePpgMap[htKey] || {};
+      return {
+        team_name: ht,
+        gp:        live.gp          ?? statsRow.gp   ?? null,
+        ppg:       live.ppg         ?? statsRow.ppg  ?? null,  // live always wins
+        dppg:      live.dppg        ?? statsRow.dppg ?? null,  // live always wins
+        ypg:       statsRow.ypg     ?? null,
+        pass_tds:  statsRow.pass_tds ?? null,
+        ypga:      statsRow.ypga    ?? null,
+        sacks:     statsRow.sacks   ?? null,
+      };
+    }).filter(r => r.ppg != null || r.dppg != null);
+
+    const teamStatsSummary = mergedStatsRows.length > 0
       ? [
-          '=== TEAM STATS (human teams, current season) ===',
+          '=== TEAM STATS (human teams, current season — PPG/DPPG auto-computed from game results) ===',
           'OFFENSE (ranked by scoring):',
-          teamStatsRows
+          [...mergedStatsRows]
             .filter(s => s.ppg != null)
             .sort((a, b) => (b.ppg || 0) - (a.ppg || 0))
-            .map((s, i) => `  ${i + 1}. ${s.team_name}: ${s.ppg} PPG, ${s.ypg} YPG, ${s.pass_tds} PTD`)
+            .map((s, i) => {
+              const extras = [s.ypg && `${s.ypg} YPG`, s.pass_tds && `${s.pass_tds} PTD`].filter(Boolean).join(', ')
+              return `  ${i + 1}. ${s.team_name}: ${s.ppg} PPG${extras ? ', ' + extras : ''} (${s.gp ?? '?'} games)`
+            })
             .join('\n'),
           'DEFENSE (ranked by fewest points allowed):',
-          teamStatsRows
+          [...mergedStatsRows]
             .filter(s => s.dppg != null)
             .sort((a, b) => (a.dppg || 99) - (b.dppg || 99))
-            .map((s, i) => `  ${i + 1}. ${s.team_name}: ${s.dppg} DPPG, ${s.ypga} YPGA, ${s.sacks} sacks`)
+            .map((s, i) => {
+              const extras = [s.ypga && `${s.ypga} YPGA`, s.sacks && `${s.sacks} sacks`].filter(Boolean).join(', ')
+              return `  ${i + 1}. ${s.team_name}: ${s.dppg} DPPG${extras ? ', ' + extras : ''} (${s.gp ?? '?'} games)`
+            })
             .join('\n'),
         ].join('\n')
-      : 'No team stats synced yet for this season.';
+      : 'No team stats available yet — sync some game results first.';
 
-    // ── AP Rankings — read from dedicated table, fall back to league_settings ──
+    // ── AP Rankings — sort by voting points descending (same logic as the frontend) ──
     const { data: apRankingsRows } = await supabase
-      .from('ap_rankings').select('*').order('rank', { ascending: true });
+      .from('ap_rankings').select('*');
     const { data: leagueSettings } = await supabase
       .from('league_settings').select('ap_rankings').eq('id', 1).single();
-    const apRankings = (apRankingsRows && apRankingsRows.length > 0)
+    const apRankingsRaw = (apRankingsRows && apRankingsRows.length > 0)
       ? apRankingsRows
       : (leagueSettings?.ap_rankings || []);
+    // Sort by voting points desc — highest points = #1, same as the display logic
+    const apRankings = [...apRankingsRaw].sort((a, b) => {
+      const ptsDiff = (b.points || 0) - (a.points || 0);
+      return ptsDiff !== 0 ? ptsDiff : (a.rank || 999) - (b.rank || 999);
+    });
+    // Assign corrected ranks based on sorted position
+    apRankings.forEach((r, i) => { r._computedRank = i + 1; });
 
     // Helper: get a team's AP rank (or null)
     const getApRank = (teamName) => {
@@ -188,7 +232,7 @@ export default async function handler(req, res) {
       const entry = apRankings.find(r =>
         (r.team_name || '').toLowerCase().trim() === teamName.toLowerCase().trim()
       );
-      return entry ? entry.rank : null;
+      return entry ? entry._computedRank : null;
     };
 
     // Build ranked team name string: e.g. "#4 Alabama" or just "Alabama"
@@ -198,7 +242,7 @@ export default async function handler(req, res) {
     };
 
     const apRankingsSummary = apRankings.length > 0
-      ? apRankings.slice(0, 25).map(r => `#${r.rank} ${r.team_name}${r.record ? ` (${r.record})` : ''}`).join('\n')
+      ? apRankings.slice(0, 25).map(r => `#${r._computedRank} ${r.team_name}${r.record ? ` (${r.record})` : ''}${r.points ? ` - ${r.points} pts` : ''}`).join('\n')
       : 'AP Poll not yet available.';
 
     // ── Build rich coach profiles ────────────────────────────────────────

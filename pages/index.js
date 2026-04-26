@@ -1121,8 +1121,14 @@ function Standings({ teams, isMobile, settings }) {
   const PLAYOFF_LINE = 4
 
   // ── AP Poll view ───────────────────────────────────
-  // Sort by the actual stored rank number (ascending), not by points
-  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => (a.rank || 999) - (b.rank || 999))
+  // Sort by voting POINTS descending — the team with the most media/coach votes
+  // is always #1 regardless of what rank was stored in the screenshot.
+  // Stored rank is used only as a tiebreaker when points are equal.
+  const apRankings = [...(settings?.ap_rankings || [])].sort((a, b) => {
+    const ptsDiff = (b.points || 0) - (a.points || 0)
+    if (ptsDiff !== 0) return ptsDiff
+    return (a.rank || 999) - (b.rank || 999)
+  })
 
   // Build a live record lookup from the teams array so the AP poll always
   // shows current W-L rather than the stale record from the screenshot.
@@ -1222,7 +1228,7 @@ function Standings({ teams, isMobile, settings }) {
                 </thead>
                 <tbody>
                   {apRankings.map((entry, i) => {
-                    const displayRank = entry.rank || (i + 1)
+                    const displayRank = i + 1  // position in points-sorted array IS the rank
                     const liveRecord = getLiveRecord(entry.team_name, entry.record)
                     return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : C.surface + '66' }}>

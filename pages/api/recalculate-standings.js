@@ -96,10 +96,29 @@ export default async function handler(req, res) {
       }, { onConflict: 'name,season' });
 
       if (!upsertErr) teamsUpdated++;
+
+      // ── Auto-compute PPG / DPPG and upsert into team_stats ──────────────
+      // This keeps the AI article generator's stats current without needing
+      // a separate team stats screenshot upload.
+      const gamesPlayed = rec.wins + rec.losses;
+      if (gamesPlayed > 0) {
+        const ppg  = Math.round((rec.pts         / gamesPlayed) * 10) / 10;
+        const dppg = Math.round((rec.pts_against / gamesPlayed) * 10) / 10;
+        await supabase.from('team_stats').upsert({
+          team_name:   team,
+          season:      rec.season,
+          gp:          gamesPlayed,
+          ppg,
+          pts_scored:  rec.pts,
+          dppg,
+          pts_allowed: rec.pts_against,
+          updated_at:  new Date().toISOString(),
+        }, { onConflict: 'season,team_name' });
+      }
     }
 
     return res.status(200).json({
-      message: `Standings recalculated from ${finalGames.length} completed game${finalGames.length !== 1 ? 's' : ''}. ${teamsUpdated} team${teamsUpdated !== 1 ? 's' : ''} updated.`,
+      message: `Standings recalculated from ${finalGames.length} completed game${finalGames.length !== 1 ? 's' : ''}. ${teamsUpdated} team${teamsUpdated !== 1 ? 's' : ''} updated. PPG/DPPG auto-computed for all teams.`,
       gamesProcessed: finalGames.length,
       teamsUpdated,
     });
