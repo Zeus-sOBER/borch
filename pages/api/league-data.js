@@ -26,11 +26,29 @@ export default async function handler(req, res) {
   // Filter to the current season; fall back to league_settings JSONB if table is empty
   const currentSeason = rawSettings.current_season ?? 1
   const apForSeason = apRankingsRows.filter(r => r.season === currentSeason)
+
+  // Sort by voting points DESCENDING then assign corrected rank numbers.
+  // This means the team with the most poll votes is always #1 — no stale
+  // rank field from old screenshots can flip the order.
+  const apSorted = (apForSeason.length > 0 ? apForSeason : (rawSettings.ap_rankings || []))
+    .slice()
+    .sort((a, b) => {
+      const ptsDiff = (Number(b.points) || 0) - (Number(a.points) || 0)
+      return ptsDiff !== 0 ? ptsDiff : (Number(a.rank) || 999) - (Number(b.rank) || 999)
+    })
+    .map((r, i) => ({
+      rank:             i + 1,          // corrected rank based on actual points
+      team_name:        r.team_name,
+      record:           r.record        || null,
+      points:           Number(r.points) || null,
+      lw:               r.lw            ?? null,
+      last_week_result: r.last_week_result ?? null,
+      this_week:        r.this_week     ?? null,
+    }))
+
   const settings = {
     ...rawSettings,
-    ap_rankings: apForSeason.length > 0
-      ? apForSeason.map(r => ({ rank: r.rank, team_name: r.team_name, record: r.record, points: r.points, lw: r.lw, last_week_result: r.last_week_result, this_week: r.this_week }))
-      : (rawSettings.ap_rankings || []),
+    ap_rankings: apSorted,
   }
 
   // ── Normalize teams: rename team_name → name, join coach from coaches table ──
