@@ -23,14 +23,14 @@ export default async function handler(req, res) {
   // Inject ap_rankings from the dedicated table into settings so the frontend
   // can read settings.ap_rankings exactly as before — no frontend changes needed.
   const apRankingsRows = apRankingsRes.data || []
-  // Filter to the current season; fall back to league_settings JSONB if table is empty
+  // Filter to the current season; ap_rankings table is the ONLY source (no fallback)
   const currentSeason = rawSettings.current_season ?? 1
   const apForSeason = apRankingsRows.filter(r => r.season === currentSeason)
 
   // Sort by voting points DESCENDING then assign corrected rank numbers.
   // This means the team with the most poll votes is always #1 — no stale
   // rank field from old screenshots can flip the order.
-  const apSorted = (apForSeason.length > 0 ? apForSeason : (rawSettings.ap_rankings || []))
+  const apSorted = apForSeason
     .slice()
     .sort((a, b) => {
       const ptsDiff = (Number(b.points) || 0) - (Number(a.points) || 0)

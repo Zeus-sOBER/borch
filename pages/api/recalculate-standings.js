@@ -97,6 +97,39 @@ export default async function handler(req, res) {
 
       if (!upsertErr) teamsUpdated++;
 
+      // ── Auto-update corresponding coach's season_records and overall record ──
+      // After updating team wins/losses, sync the coach's data
+      const { data: coachList } = await supabase
+        .from('coaches')
+        .select('id, team, season_records, overall_wins, overall_losses')
+        .eq('team', team)
+        .limit(1);
+
+      if (coachList?.length > 0) {
+        const coach = coachList[0];
+        const seasonRecords = coach.season_records || [];
+
+        // Find or create record for this season
+        let seasonRecord = seasonRecords.find(r => r.season === rec.season);
+        if (!seasonRecord) {
+          seasonRecord = { season: rec.season, wins: rec.wins, losses: rec.losses };
+          seasonRecords.push(seasonRecord);
+        } else {
+          seasonRecord.wins = rec.wins;
+          seasonRecord.losses = rec.losses;
+        }
+
+        // Recalculate overall record from all season records
+        const totalWins = seasonRecords.reduce((sum, r) => sum + (r.wins || 0), 0);
+        const totalLosses = seasonRecords.reduce((sum, r) => sum + (r.losses || 0), 0);
+
+        await supabase.from('coaches').update({
+          season_records: seasonRecords,
+          overall_wins: totalWins,
+          overall_losses: totalLosses,
+        }).eq('id', coach.id);
+      }
+
       // ── Auto-compute PPG / DPPG and upsert into team_stats ──────────────
       // This keeps the AI article generator's stats current without needing
       // a separate team stats screenshot upload.

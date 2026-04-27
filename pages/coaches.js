@@ -912,13 +912,12 @@ export default function CoachesPage() {
     <>
       <Head>
         <title>Coaches · Dynasty Universe</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet" />
       </Head>
       <style>{`* { box-sizing:border-box; } body { margin:0; background:${C.bg}; font-family:'Lato',sans-serif; color:${C.text}; } ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:${C.surface};} ::-webkit-scrollbar-thumb{background:${C.subtle};border-radius:3px;}`}</style>
 
       {/* Nav */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: isMobile ? '0 14px' : '0 24px' }}>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: isMobile ? '0 14px' : '0 24px', paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 20 }}>
           <a href="/" style={{ textDecoration: 'none', padding: '14px 0', borderRight: `1px solid ${C.border}`, paddingRight: isMobile ? 12 : 20, marginRight: 4 }}>
             <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 16 : 18, fontWeight: 700, letterSpacing: 2, color: C.accent, lineHeight: 1 }}>DYNASTY</div>
@@ -934,7 +933,7 @@ export default function CoachesPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '32px 24px' }}>
+      <div style={{ maxWidth: 1160, margin: '0 auto', padding: isMobile ? '16px 12px 120px' : '32px 24px', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>

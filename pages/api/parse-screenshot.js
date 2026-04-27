@@ -232,10 +232,32 @@ export default async function handler(req, res) {
       records_parsed: totalRecords,
     });
 
+    // ── Auto-trigger standings recalculation if games or standings were saved ──
+    let standingsRecalcNote = '';
+    if ((saveResult?.games > 0 || saveResult?.standings > 0) && process.env.COMMISSIONER_PIN) {
+      try {
+        // Call recalculate-standings endpoint to sync coach records and team stats
+        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+        const recalcRes = await fetch(`${baseUrl}/api/recalculate-standings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: process.env.COMMISSIONER_PIN }),
+        });
+
+        if (recalcRes.ok) {
+          const recalcData = await recalcRes.json();
+          standingsRecalcNote = ` Standings auto-recalculated: ${recalcData.teamsUpdated} teams updated.`;
+        }
+      } catch (recalcErr) {
+        // Non-critical — log but don't break the response
+        console.error('[parse-screenshot] Auto-recalculate failed (non-critical):', recalcErr.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
       detectedType: parsedResult.type,
-      summary: parsedResult.summary,
+      summary: parsedResult.summary + standingsRecalcNote,
       saved: saveResult
     });
 

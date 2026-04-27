@@ -143,7 +143,7 @@ export default function MediaCenter() {
       `}</style>
 
       {/* ── TOP BAR ── */}
-      <div style={{ background: C.surface, borderBottom: `2px solid ${C.accent}`, padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56, position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: C.surface, borderBottom: `2px solid ${C.accent}`, padding: '0 24px', paddingTop: 'env(safe-area-inset-top)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 56, position: 'sticky', top: 0, zIndex: 100 }}>
         <Link href="/" style={{ fontFamily: 'Oswald,sans-serif', color: C.accent, fontSize: 20, fontWeight: 700, textDecoration: 'none' }}>DYNASTY UNIVERSE</Link>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
           <Link href="/" style={{ color: C.muted, textDecoration: 'none', fontSize: 13, fontFamily: 'Oswald,sans-serif', letterSpacing: 1 }}>← Hub</Link>
@@ -162,7 +162,7 @@ export default function MediaCenter() {
           <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted, letterSpacing: 1 }}>ENTER PIN:</span>
           <input type="password" placeholder="Commissioner PIN" value={pinInput}
             onChange={e => setPinInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-            style={{ background: C.bg, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 14, width: 180, letterSpacing: 4 }}
+            style={{ background: C.bg, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 16, width: 180, letterSpacing: 4 }}
             autoFocus
           />
           <button onClick={handlePinSubmit} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 13, fontWeight: 700 }}>Unlock</button>
@@ -171,7 +171,7 @@ export default function MediaCenter() {
         </div>
       )}
 
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 20px 60px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 20px 120px', width: '100%', boxSizing: 'border-box' }}>
 
         {/* ── PAGE HEADER ── */}
         <div style={{ marginBottom: 28 }}>

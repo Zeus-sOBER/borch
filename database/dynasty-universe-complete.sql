@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS heisman_watch (
   trophy_screenshot_date  TIMESTAMPTZ DEFAULT NOW(),
   week_updated            INT,
   season                  INT DEFAULT 1,
+  trend                   TEXT DEFAULT 'same',
+  class_year              TEXT,
   created_at              TIMESTAMPTZ DEFAULT NOW(),
   updated_at              TIMESTAMPTZ DEFAULT NOW()
 );

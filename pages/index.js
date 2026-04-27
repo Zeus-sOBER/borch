@@ -292,7 +292,7 @@ function ScoreTicker({ games, setTab, isMobile, settings }) {
     <div style={{
       background: '#07070c',
       borderBottom: `1px solid ${C.border}`,
-      position: 'sticky', top: isMobile ? 57 : 69, zIndex: 90,
+      position: 'sticky', top: isMobile ? 'calc(57px + env(safe-area-inset-top))' : 'calc(69px + env(safe-area-inset-top))', zIndex: 90,
     }}>
       <style>{`.ticker-strip::-webkit-scrollbar { display: none; }`}</style>
       <div className="ticker-strip" style={{
@@ -1958,7 +1958,7 @@ function CompactMatchupsView({ games, teams, settings, articles, isMobile, onArt
                     {/* Inline PIN */}
                     {showPin && (
                       <div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <input type="password" placeholder="PIN" value={pinInput} onChange={e => { setPinInput(e.target.value); setPinError('') }} onKeyDown={e => e.key === 'Enter' && submitPin(g)} style={{ flex: 1, minWidth: 100, background: C.card, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 5, padding: '6px 10px', color: C.text, fontSize: 12 }} autoFocus />
+                        <input type="password" placeholder="PIN" value={pinInput} onChange={e => { setPinInput(e.target.value); setPinError('') }} onKeyDown={e => e.key === 'Enter' && submitPin(g)} style={{ flex: 1, minWidth: 100, background: C.card, border: `1px solid ${pinError ? C.red : C.border}`, borderRadius: 5, padding: '6px 10px', color: C.text, fontSize: 16 }} autoFocus />
                         <button onClick={() => submitPin(g)} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 5, padding: '6px 12px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, fontWeight: 700 }}>Generate →</button>
                         <button onClick={() => setShowPinFor(null)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
                         {pinError && <span style={{ color: C.red, fontSize: 11, width: '100%' }}>❌ {pinError}</span>}
@@ -4462,10 +4462,6 @@ export default function App() {
     <>
       <Head>
         <title>{data.settings?.league_name || 'Dynasty Universe'} · CFB 26</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-        <meta name="theme-color" content="#09090b" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet" />
       </Head>
       <style>{`
@@ -4479,7 +4475,7 @@ export default function App() {
       `}</style>
 
       {/* Top Nav */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 100, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px', display: 'flex', alignItems: 'center' }}>
 
           {/* Logo — uses league branding from settings */}
@@ -4561,7 +4557,7 @@ export default function App() {
               onChange={e => { setCommLoginInput(e.target.value); setCommLoginError('') }}
               onKeyDown={e => e.key === 'Enter' && handleCommLogin()}
               autoFocus
-              style={{ background: C.bg, border: `1px solid ${commLoginError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 14, width: 180, letterSpacing: 4 }}
+              style={{ background: C.bg, border: `1px solid ${commLoginError ? C.red : C.border}`, borderRadius: 6, padding: '8px 14px', color: C.text, fontSize: 16, width: isMobile ? '100%' : 180, maxWidth: 180, letterSpacing: 4 }}
             />
             <button onClick={handleCommLogin} style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 6, padding: '8px 18px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700 }}>Unlock</button>
             <button onClick={() => { setShowCommLogin(false); setCommLoginError(''); setCommLoginInput('') }} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
@@ -4578,7 +4574,9 @@ export default function App() {
       {/* Main content */}
       <div style={{
         maxWidth: 1160, margin: '0 auto',
-        padding: isMobile ? '16px 12px 110px' : '36px 24px 40px',
+        padding: isMobile ? '16px 12px 120px' : '36px 24px 40px',
+        width: '100%',
+        boxSizing: 'border-box',
       }}>
         {loadingData
           ? (
