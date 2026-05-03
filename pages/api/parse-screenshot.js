@@ -915,6 +915,36 @@ async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
   // Save games
   let hasFinalGames = false;
   if (data.games?.length > 0) {
+    // ── Pre-load all existing games for this season so we can deduplicate
+    // in memory rather than issuing one DB round-trip per game.
+    // This catches duplicates even when team names are swapped (home↔away)
+    // or arrive under slightly different spellings.
+    const gameSeasonsNeeded = [...new Set(
+      data.games.map(g => g.season ?? data.season ?? currentSeason)
+    )];
+    const existingBySeasonMap = {};
+    for (const season of gameSeasonsNeeded) {
+      const { data: rows } = await supabase
+        .from('games')
+        .select('id, week, home_team, away_team, is_final')
+        .eq('season', season);
+      existingBySeasonMap[season] = rows || [];
+    }
+
+    // Build sorted-key lookup: "season|week|teamA|teamB" (teams sorted alphabetically
+    // so "Alabama vs Auburn" and "Auburn vs Alabama" resolve to the same key).
+    const normStr = (s) => (s || '').toLowerCase().trim();
+    const makeGameKey = (season, week, t1, t2) =>
+      `${season}|${week ?? 0}|${[normStr(t1), normStr(t2)].sort().join('|')}`;
+
+    const existingMap = {}; // key → { id, is_final }
+    for (const [season, rows] of Object.entries(existingBySeasonMap)) {
+      for (const row of rows) {
+        const key = makeGameKey(season, row.week, row.home_team, row.away_team);
+        existingMap[key] = row;
+      }
+    }
+
     for (const game of data.games) {
       if (!game.home_team || !game.away_team) continue;
       const rawFinal = game.is_final !== undefined && game.is_final !== null
@@ -932,31 +962,44 @@ async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
       const homeTeam = normalizeTeamName(game.home_team);
       const awayTeam = normalizeTeamName(game.away_team);
       const gameSeason = game.season ?? data.season ?? currentSeason;
+      const gameWeek   = game.week ?? data.week ?? null;
 
-      // Don't overwrite a finalised game with a non-final (scheduled) row
-      if (!isFinal) {
-        const { data: existing } = await supabase
-          .from('games')
-          .select('id, is_final')
-          .eq('season', gameSeason)
-          .eq('week', game.week ?? data.week ?? 0)
-          .eq('home_team', homeTeam)
-          .eq('away_team', awayTeam)
-          .maybeSingle();
-        if (existing?.is_final) { saved.games++; continue; }
+      // ── Deduplicate in memory (catches home↔away swaps + name variants) ──
+      const key = makeGameKey(gameSeason, gameWeek, homeTeam, awayTeam);
+      const existing = existingMap[key];
+
+      // Never overwrite a finalised game with a non-final (scheduled) row
+      if (existing?.is_final && !isFinal) {
+        saved.games++;
+        continue;
       }
 
-      const { error } = await supabase.from('games').upsert({
+      const upsertPayload = {
         home_team:  homeTeam,
         away_team:  awayTeam,
         season:     gameSeason,
         home_score: hasRealScores ? homeScore : null,
         away_score: hasRealScores ? awayScore : null,
-        week:       game.week ?? data.week ?? null,
+        week:       gameWeek,
         is_final:   isFinal,
         game_type:  game.game_type ?? 'regular',
         notes:      game.notes     ?? null,
-      }, { onConflict: 'home_team,away_team,week,season' });
+      };
+
+      let error;
+      if (existing) {
+        // Update the existing row by ID — avoids re-inserting a duplicate
+        ({ error } = await supabase.from('games').update(upsertPayload).eq('id', existing.id));
+      } else {
+        // Insert new row — fall back to upsert on the unique constraint as a safety net
+        ({ error } = await supabase.from('games').upsert(
+          upsertPayload,
+          { onConflict: 'home_team,away_team,week,season' }
+        ));
+        // Register in local map so subsequent games in the same batch don't duplicate
+        existingMap[key] = { id: null, is_final: isFinal };
+      }
+
       if (!error) saved.games++;
     }
 
@@ -1189,6 +1232,24 @@ async function logParsedResultToNarrative(data, coaches, humanTeams) {
 
     // Log each final game result
     if (data.games?.length > 0) {
+      // ── Pre-load existing narrative_log entries for this season so we can
+      // skip games that were already logged (prevents duplicate AI entries when
+      // the same screenshot or sheet row is processed more than once).
+      const season = data.season ?? 1;
+      const { data: existingNarrative } = await db
+        .from('narrative_log')
+        .select('title, week, featured_team, opposing_team')
+        .eq('season', season)
+        .eq('event_type', 'game');
+
+      // Build a Set of canonical game signatures: "season|week|winnerNorm|loserNorm"
+      const normN = (s) => (s || '').toLowerCase().trim();
+      const narrativeKeys = new Set(
+        (existingNarrative || []).map(e =>
+          `${season}|${e.week ?? ''}|${[normN(e.featured_team), normN(e.opposing_team)].sort().join('|')}`
+        )
+      );
+
       for (const game of data.games) {
         if (!game.home_team || !game.away_team || !game.is_final) continue;
 
@@ -1202,12 +1263,18 @@ async function logParsedResultToNarrative(data, coaches, humanTeams) {
         const { tags, weight, featuredCoach, opposingCoach, winner, loser, winnerScore, loserScore }
           = analyzeGame(game, coaches, standings || []);
 
+        // ── Skip if this exact game result is already in the narrative log ──
+        const gameWeek = game.week ?? data.week ?? '';
+        const narrativeKey = `${season}|${gameWeek}|${[normN(winner), normN(loser)].sort().join('|')}`;
+        if (narrativeKeys.has(narrativeKey)) continue;
+        narrativeKeys.add(narrativeKey); // prevent dupes within the same batch
+
         const winnerStr = winnerScore !== undefined ? `${winnerScore}` : '?';
         const loserStr  = loserScore  !== undefined ? `${loserScore}` : '?';
 
         await logNarrativeEvent({
           event_type:       'game',
-          season:           data.season ?? 1,
+          season:           season,
           week:             game.week ?? data.week ?? null,
           featured_coach:   featuredCoach,
           featured_team:    winner,
