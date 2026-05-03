@@ -136,10 +136,11 @@ TYPE 2 — UPCOMING GAME (no score present):
   - Set "is_final": false
   - Set "home_score": null, "away_score": null
 
-SKIP these rows entirely:
+SKIP these rows entirely — do NOT output them at all:
   - Section header rows like "WEEK 3 — EARLY SEASON", "WEEK 14 — CONF. CHAMPIONSHIPS"
-  - Empty rows (no team names)
+  - ANY row where Home Team OR Away Team cell is blank, empty, or missing — even if Week or Game Type is filled in
   - Rows with only "BYE WEEK" in Opponent Type
+  - Rows where the team name is a placeholder like "TBD", "TBA", "?", or similar
 
 SPREADSHEET CSV CONTENT:
 ---
@@ -217,8 +218,12 @@ async function saveGames(games, season) {
   let upserted = 0
   let errors   = 0
 
+  // Also reject placeholder team names Claude sometimes invents for blank cells
+  const PLACEHOLDER = /^(tbd|tba|\?+|unknown|none|n\/a|empty)$/i
+
   for (const game of games) {
-    if (!game.home_team || !game.away_team) continue
+    if (!game.home_team?.trim() || !game.away_team?.trim()) continue
+    if (PLACEHOLDER.test(game.home_team.trim()) || PLACEHOLDER.test(game.away_team.trim())) continue
 
     const week    = game.week ?? 0
     const key     = makeKey(week, game.home_team, game.away_team)

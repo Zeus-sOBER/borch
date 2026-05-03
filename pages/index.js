@@ -2992,6 +2992,31 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
   const [msg, setMsg]                 = useState(null)
   const [recalculating, setRecalculating] = useState(false)
   const [recalcMsg, setRecalcMsg]     = useState(null)
+  const [deduping, setDeduping]       = useState(false)
+  const [dedupMsg, setDedupMsg]       = useState(null)
+
+  const dedupGames = async () => {
+    setDeduping(true)
+    setDedupMsg(null)
+    try {
+      const res  = await fetch('/api/dedup-games', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: commPin }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDedupMsg({ ok: true, text: data.message })
+        if ((data.duplicatesRemoved || 0) > 0) onRefresh?.()
+      } else {
+        setDedupMsg({ ok: false, text: data.error || 'Dedup failed' })
+      }
+    } catch (e) {
+      setDedupMsg({ ok: false, text: e.message })
+    } finally {
+      setDeduping(false)
+    }
+  }
 
   const recalcStandings = async () => {
     setRecalculating(true)
@@ -3154,6 +3179,36 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
         {recalcMsg && (
           <div style={{ marginTop: 8, color: recalcMsg.ok ? C.green : C.red, fontSize: 12 }}>
             {recalcMsg.ok ? '✅' : '❌'} {recalcMsg.text}
+          </div>
+        )}
+      </div>
+
+      {/* ── Dedup Games ── */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+          Remove Duplicate Games
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+          Scans the database for duplicate matchups (same teams, same week) and removes the extras. Keeps the best version — finalized rows with real scores take priority.
+        </div>
+        <button
+          onClick={dedupGames}
+          disabled={deduping}
+          style={{
+            background: deduping ? C.subtle : C.surface,
+            color: deduping ? C.muted : C.text,
+            border: `1px solid ${deduping ? C.border : '#e05252' + '88'}`,
+            borderRadius: 6, padding: '10px 20px',
+            cursor: deduping ? 'not-allowed' : 'pointer',
+            fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 0.5,
+            minHeight: 42,
+          }}
+        >
+          {deduping ? '⏳ Deduplicating...' : '🧹 Remove Duplicate Games'}
+        </button>
+        {dedupMsg && (
+          <div style={{ marginTop: 8, color: dedupMsg.ok ? C.green : C.red, fontSize: 12 }}>
+            {dedupMsg.ok ? '✅' : '❌'} {dedupMsg.text}
           </div>
         )}
       </div>

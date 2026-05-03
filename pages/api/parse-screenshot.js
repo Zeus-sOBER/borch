@@ -157,8 +157,20 @@ export default async function handler(req, res) {
       const { data: settings } = await supabase
         .from('league_settings').select('sheet_csv_hash').eq('id', 1).single();
 
-      if (settings?.sheet_csv_hash === csvHash) {
-        // Sheet is identical to last scan — nothing to do
+      // Only use the cache if the sheet has real team data — never cache a
+      // sheet full of blank rows, otherwise we'd skip future scans even after
+      // the commissioner fills in the team names.
+      const csvLines = sheetCsv.split('\n');
+      // Count non-header lines that have at least two non-empty comma-separated values
+      // (a proxy for "has real home+away team data")
+      const hasRealTeamData = csvLines.slice(2).some(line => {
+        const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        // cols[1] = Home Team, cols[2] = Away Team (0-indexed after Week col)
+        return cols[1] && cols[1].length > 1 && cols[2] && cols[2].length > 1;
+      });
+
+      if (hasRealTeamData && settings?.sheet_csv_hash === csvHash) {
+        // Sheet is identical to last scan and has real data — nothing to do
         return res.status(200).json({
           success: true,
           detectedType: 'schedule',
@@ -177,8 +189,8 @@ export default async function handler(req, res) {
       const finalizedGames = finalizedRows || [];
 
       parsedResult = await parseScheduleDoc(sheetCsv, coaches, humanTeams, finalizedGames);
-      // Store the new hash so the next identical scan is skipped
-      parsedResult._csvHash = csvHash;
+      // Only cache the hash if the sheet actually had real team data this scan
+      if (hasRealTeamData) parsedResult._csvHash = csvHash;
     } else if (isScheduleImport && isGoogleDoc) {
       // ── SCHEDULE DOC → pre-populate upcoming matchups ─────────────────────
       const docText = await fetchGoogleDocText(fileId);
@@ -321,10 +333,11 @@ TYPE 2 — UPCOMING GAME (no score present):
   - Set "is_final": false
   - Set "home_score": null, "away_score": null
 
-SKIP these rows entirely:
+SKIP these rows entirely — do NOT output them at all:
   - Section header rows like "WEEK 3 — EARLY SEASON", "WEEK 14 — CONF. CHAMPIONSHIPS"
-  - Empty rows (no team names)
+  - ANY row where Home Team OR Away Team cell is blank, empty, or missing — even if Week or Game Type is filled in
   - Rows with only "BYE WEEK" in Opponent Type
+  - Rows where the team name is a placeholder like "TBD", "TBA", "?", or similar
 
 DOCUMENT CONTENT:
 ---
@@ -946,7 +959,11 @@ async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
     }
 
     for (const game of data.games) {
-      if (!game.home_team || !game.away_team) continue;
+      // Hard guard — skip any row where either team name is missing or whitespace-only
+      if (!game.home_team?.trim() || !game.away_team?.trim()) continue;
+      // Also skip placeholder team names that Claude sometimes invents for blank cells
+      const PLACEHOLDER = /^(tbd|tba|\?+|unknown|none|n\/a|empty)$/i;
+      if (PLACEHOLDER.test(game.home_team.trim()) || PLACEHOLDER.test(game.away_team.trim())) continue;
       const rawFinal = game.is_final !== undefined && game.is_final !== null
         ? game.is_final
         : (data.source !== 'schedule_doc' && data.source !== 'schedule_image');
