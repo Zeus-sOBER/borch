@@ -1126,7 +1126,7 @@ async function saveToSupabase(data, coaches, humanTeams, currentSeason = 1) {
 
   // Save AP Poll → dedicated ap_rankings table (editable row-by-row in Supabase)
   if (data.type === 'ap_poll' && data.rankings?.length > 0) {
-    const season = data.season ?? 1;
+    const season = Number(data.season ?? 1);
     // UPSERT by season+rank — DO NOT delete first, so two-screenshot uploads merge:
     // screenshot 1 (ranks 1-14) + screenshot 2 (ranks 15-25) both survive.
     for (const e of data.rankings) {

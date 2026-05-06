@@ -24,8 +24,14 @@ export default async function handler(req, res) {
   // can read settings.ap_rankings exactly as before — no frontend changes needed.
   const apRankingsRows = apRankingsRes.data || []
   // Filter to the current season; ap_rankings table is the ONLY source (no fallback)
-  const currentSeason = rawSettings.current_season ?? 1
-  const apForSeason = apRankingsRows.filter(r => r.season === currentSeason)
+  // Use == (loose) comparison because season might be stored as string or number
+  const currentSeason = Number(rawSettings.current_season ?? 1)
+  let apForSeason = apRankingsRows.filter(r => Number(r.season) === currentSeason)
+  // If no data for current season but table has rows, show the latest data
+  // (prevents empty AP poll when season number doesn't match)
+  if (apForSeason.length === 0 && apRankingsRows.length > 0) {
+    apForSeason = apRankingsRows
+  }
 
   // Sort by voting points DESCENDING then assign corrected rank numbers.
   // This means the team with the most poll votes is always #1 — no stale
