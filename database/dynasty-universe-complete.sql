@@ -337,7 +337,10 @@ CREATE INDEX IF NOT EXISTS idx_narrative_season ON narrative_log(season);
 CREATE INDEX IF NOT EXISTS idx_narrative_type ON narrative_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_coaches_active ON coaches(is_active);
 CREATE INDEX IF NOT EXISTS idx_coaches_edit_token ON coaches(edit_token);
-CREATE INDEX IF NOT EXISTS idx_ap_rankings_season ON ap_rankings(season, rank);
+-- UNIQUE constraint required for upsert onConflict: 'season,rank' to work
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ap_rankings_season_rank ON ap_rankings(season, rank);
+-- Also keep a plain season index for filtering
+CREATE INDEX IF NOT EXISTS idx_ap_rankings_season ON ap_rankings(season);
 CREATE INDEX IF NOT EXISTS idx_heisman_season ON heisman_watch(season);
 CREATE INDEX IF NOT EXISTS idx_articles_type ON articles(article_type);
 
