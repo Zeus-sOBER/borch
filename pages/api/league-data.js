@@ -23,14 +23,16 @@ export default async function handler(req, res) {
   // Inject ap_rankings from the dedicated table into settings so the frontend
   // can read settings.ap_rankings exactly as before — no frontend changes needed.
   const apRankingsRows = apRankingsRes.data || []
-  // Filter to the current season; ap_rankings table is the ONLY source (no fallback)
-  // Use == (loose) comparison because season might be stored as string or number
+  // Try the dedicated table first, fall back to JSONB in league_settings
   const currentSeason = Number(rawSettings.current_season ?? 1)
   let apForSeason = apRankingsRows.filter(r => Number(r.season) === currentSeason)
-  // If no data for current season but table has rows, show the latest data
-  // (prevents empty AP poll when season number doesn't match)
+  // If no data for current season but table has rows, show all table data
   if (apForSeason.length === 0 && apRankingsRows.length > 0) {
     apForSeason = apRankingsRows
+  }
+  // If table is completely empty (e.g. RLS blocking reads), fall back to JSONB
+  if (apForSeason.length === 0 && Array.isArray(rawSettings.ap_rankings) && rawSettings.ap_rankings.length > 0) {
+    apForSeason = rawSettings.ap_rankings
   }
 
   // Sort by voting points DESCENDING then assign corrected rank numbers.
