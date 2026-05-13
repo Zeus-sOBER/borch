@@ -1,9 +1,13 @@
-import { supabase } from '../../lib/supabase'
+import { supabase, supabaseAdmin } from '../../lib/supabase'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
 
   const season = req.query.season || 1
+
+  // Use supabaseAdmin() for ap_rankings to bypass RLS policies that block the anon key.
+  // All other tables work fine with the anon key.
+  const admin = supabaseAdmin()
 
   const [teamsRes, gamesRes, playersRes, logRes, coachesRes, settingsRes, heismanRes, champsRes, apRankingsRes] = await Promise.all([
     supabase.from('teams').select('*').order('wins', { ascending: false }),
@@ -14,7 +18,7 @@ export default async function handler(req, res) {
     supabase.from('league_settings').select('*').eq('id', 1).single(),
     supabase.from('heisman_watch').select('*').order('rank', { ascending: true }).limit(5),
     supabase.from('championships').select('*').eq('championship_type', 'national').order('season', { ascending: false }),
-    supabase.from('ap_rankings').select('*').order('rank', { ascending: true }),
+    admin.from('ap_rankings').select('*').order('rank', { ascending: true }),
   ])
 
   const coaches  = coachesRes.data  || []
@@ -22,18 +26,18 @@ export default async function handler(req, res) {
 
   // Inject ap_rankings from the dedicated table into settings so the frontend
   // can read settings.ap_rankings exactly as before — no frontend changes needed.
+  // The ap_rankings table is the ONLY source of truth (queried via admin client to bypass RLS).
+  // The old JSONB fallback in league_settings.ap_rankings is intentionally ignored — it was stale.
   const apRankingsRows = apRankingsRes.data || []
-  // Try the dedicated table first, fall back to JSONB in league_settings
   const currentSeason = Number(rawSettings.current_season ?? 1)
   let apForSeason = apRankingsRows.filter(r => Number(r.season) === currentSeason)
   // If no data for current season but table has rows, show all table data
   if (apForSeason.length === 0 && apRankingsRows.length > 0) {
     apForSeason = apRankingsRows
   }
-  // If table is completely empty (e.g. RLS blocking reads), fall back to JSONB
-  if (apForSeason.length === 0 && Array.isArray(rawSettings.ap_rankings) && rawSettings.ap_rankings.length > 0) {
-    apForSeason = rawSettings.ap_rankings
-  }
+  // NOTE: No JSONB fallback. The ap_rankings TABLE is the single source of truth.
+  // TODO: Consider adding a manual AP rankings editor UI so the user can update
+  // rankings without needing to upload a screenshot every time.
 
   // Sort by voting points DESCENDING then assign corrected rank numbers.
   // This means the team with the most poll votes is always #1 — no stale
