@@ -1163,12 +1163,8 @@ function Standings({ teams, isMobile, settings }) {
     if (liveRecordMap[key]) return liveRecordMap[key]
     const alias = AP_NAME_ALIASES[key]
     if (alias && liveRecordMap[alias]) return liveRecordMap[alias]
-    // Partial match — only if the team name is long enough to avoid false matches
-    if (key.length > 5) {
-      for (const [k, v] of Object.entries(liveRecordMap)) {
-        if (k.length > 5 && (k.includes(key) || key.includes(k))) return v
-      }
-    }
+    // No partial matching — it causes false positives (e.g. "Miami University"
+    // matching "Miami" when they're different schools). Use the screenshot record instead.
     return fallback || '—'
   }
 
