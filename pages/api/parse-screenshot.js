@@ -26,16 +26,16 @@ COLLEGE FOOTBALL SCHEDULE STRUCTURE (EA Sports CFB dynasty mode):
 - Week 0: Kickoff weekend. Early non-conference openers. Valid week — do NOT skip it.
 - Weeks 1-4: Early regular season. Non-conference games common. Records still forming.
 - Weeks 5-9: Mid regular season. Conference play begins. Rivalry implications building.
-- Weeks 10-13: Late regular season. Conference title races, rivalry week approaching.
-- Week 14: Conference Championship Games. Top 2 teams in each conference.
-- Week 15: CFP First Round / Bowl Selection. 12-team playoff bracket set.
-- Weeks 16-17: CFP Quarterfinals and Semifinals.
-- Week 18: National Championship Game. One team crowned champion.
-- Bowl games run parallel for teams not in the CFP (weeks 15-17).
+- Weeks 10-15: Late regular season. Conference title races, rivalry week approaching.
+- Week 16: Conference Championship Games. Top 2 teams in each conference.
+- Week 17: CFP First Round / Bowl Selection. 12-team playoff bracket set.
+- Weeks 18-19: CFP Quarterfinals and Semifinals.
+- Week 20: National Championship Game. One team crowned champion.
+- Bowl games run parallel for teams not in the CFP (weeks 17-19).
 
 Use this context to interpret screenshots correctly:
-- A trophy screen in week 18 = National Championship
-- A trophy screen in week 14 = Conference Championship
+- A trophy screen in week 20 = National Championship
+- A trophy screen in week 16 = Conference Championship
 - A bracket screen = CFP Playoff bracket
 - Final scores with bowl game names = Bowl game results
 `;
@@ -364,7 +364,7 @@ Return ONLY a JSON object (no markdown, no explanation):
 
 Rules:
 - "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
-- Week 14 = "conference_championship", weeks 15-18 = playoff/bowl
+- Week 16 = "conference_championship", weeks 17-20 = playoff/bowl
 - Week 0 is valid — keep it as week 0
 - Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3
 - "notes": copy any text from the Notes / Bowl Game Name column verbatim. Set null if empty.

@@ -1535,17 +1535,17 @@ function ShareCard({ game, onClose, apRankings = [] }) {
 }
 
 // ── Season ─────────────────────────────────────────────────────
-const WEEK_SHORT = { 0: 'Wk 0', 14: 'Conf Champ', 15: 'CFP R1', 16: 'CFP QF', 17: 'CFP SF', 18: 'Natl Champ' }
+const WEEK_SHORT = { 0: 'Wk 0', 16: 'Conf Champ', 17: 'CFP R1', 18: 'CFP QF', 19: 'CFP SF', 20: 'Natl Champ' }
 const SEASON_PHASES = [
   { range: [0,  0],  label: 'WEEK 0 — KICKOFF',      sub: 'Early openers · Non-conference · Dynasty begins here' },
   { range: [1,  4],  label: 'EARLY SEASON',           sub: 'Non-conference play · Records still forming' },
   { range: [5,  9],  label: 'CONFERENCE PLAY',        sub: 'Division races taking shape · Every loss stings' },
-  { range: [10, 13], label: 'LATE SEASON',            sub: 'Rivalry week incoming · CFP positioning is everything' },
-  { range: [14, 14], label: 'CONF. CHAMPIONSHIPS',    sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
-  { range: [15, 15], label: 'CFP FIRST ROUND',        sub: '12-team playoff begins · Road to the national title starts here' },
-  { range: [16, 16], label: 'CFP QUARTERFINALS',      sub: '8 teams remain · One loss and your season is over' },
-  { range: [17, 17], label: 'CFP SEMIFINALS',         sub: 'Final four · Two spots in the National Championship' },
-  { range: [18, 99], label: 'NATIONAL CHAMPIONSHIP',  sub: 'One game · One champion · Dynasty legacy on the line' },
+  { range: [10, 15], label: 'LATE SEASON',            sub: 'Rivalry week incoming · CFP positioning is everything' },
+  { range: [16, 16], label: 'CONF. CHAMPIONSHIPS',    sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
+  { range: [17, 17], label: 'CFP FIRST ROUND',        sub: '12-team playoff begins · Road to the national title starts here' },
+  { range: [18, 18], label: 'CFP QUARTERFINALS',      sub: '8 teams remain · One loss and your season is over' },
+  { range: [19, 19], label: 'CFP SEMIFINALS',         sub: 'Final four · Two spots in the National Championship' },
+  { range: [20, 99], label: 'NATIONAL CHAMPIONSHIP',  sub: 'One game · One champion · Dynasty legacy on the line' },
 ]
 function getPhase(w) {
   return SEASON_PHASES.find(p => w >= p.range[0] && w <= p.range[1]) || { label: `WEEK ${w}`, sub: '' }
@@ -3065,11 +3065,11 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
     if (w === 0) return 'Kickoff Weekend'
     if (w <= 4)  return 'Early Season'
     if (w <= 9)  return 'Conference Play'
-    if (w <= 13) return 'Late Season'
-    if (w === 14) return 'Conf. Championships'
-    if (w === 15) return 'CFP First Round'
-    if (w === 16) return 'CFP Quarterfinals'
-    if (w === 17) return 'CFP Semifinals'
+    if (w <= 15) return 'Late Season'
+    if (w === 16) return 'Conf. Championships'
+    if (w === 17) return 'CFP First Round'
+    if (w === 18) return 'CFP Quarterfinals'
+    if (w === 19) return 'CFP Semifinals'
     return 'National Championship'
   }
 

@@ -38,32 +38,32 @@ function getCFBWeekContext(week) {
     description: 'Conference play is underway. Division races are taking shape. Every loss stings more now.',
     isBowl: false, isPlayoff: false, isChampionship: false
   };
-  if (w <= 13) return {
+  if (w <= 15) return {
     phase: 'late regular season',
     description: 'Conference title races are heating up. Rivalry week looms. CFP positioning is everything.',
     isBowl: false, isPlayoff: false, isChampionship: false
   };
-  if (w === 14) return {
+  if (w === 16) return {
     phase: 'conference championships',
     description: 'Conference championship week. Only the best two teams in each conference are here. Trophies and CFP bids on the line.',
     isBowl: false, isPlayoff: false, isChampionship: true
   };
-  if (w === 15) return {
+  if (w === 17) return {
     phase: 'CFP first round / bowl selection',
     description: 'The CFP bracket is set. 12 teams remain. Bowl matchups announced for the rest. The road to the national title begins.',
     isBowl: true, isPlayoff: true, isChampionship: false
   };
-  if (w === 16) return {
+  if (w === 18) return {
     phase: 'CFP quarterfinals',
     description: 'CFP Quarterfinals. Only 8 teams left. One loss and your season is over.',
     isBowl: true, isPlayoff: true, isChampionship: false
   };
-  if (w === 17) return {
+  if (w === 19) return {
     phase: 'CFP semifinals',
     description: 'CFP Semifinals. Four teams. Two spots in the National Championship.',
     isBowl: true, isPlayoff: true, isChampionship: false
   };
-  if (w >= 18) return {
+  if (w >= 20) return {
     phase: 'national championship',
     description: 'The National Championship Game. One game. One champion. Dynasty legacy on the line.',
     isBowl: true, isPlayoff: true, isChampionship: true
@@ -353,11 +353,11 @@ CURRENT SEASON CONTEXT:
 COLLEGE FOOTBALL SCHEDULE:
 - Weeks 1-4: Early regular season, non-conference, records forming
 - Weeks 5-9: Conference play, division races taking shape
-- Weeks 10-13: Late regular season, rivalry week, CFP positioning critical
-- Week 14: Conference Championships — only top 2 per conference qualify
-- Week 15: CFP bracket set (12-team playoff), bowls announced
-- Weeks 16-17: CFP Quarterfinals and Semifinals
-- Week 18+: National Championship Game
+- Weeks 10-15: Late regular season, rivalry week, CFP positioning critical
+- Week 16: Conference Championships — only top 2 per conference qualify
+- Week 17: CFP bracket set (12-team playoff), bowls announced
+- Weeks 18-19: CFP Quarterfinals and Semifinals
+- Week 20+: National Championship Game
 
 AP TOP 25 RANKINGS:
 ${apRankingsSummary}
