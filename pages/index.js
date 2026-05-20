@@ -215,7 +215,8 @@ const ALL_NAV_ITEMS = [
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Awards',    icon: '🏆', label: 'Awards' },
-  { id: 'Coaches',   icon: '👤', label: 'Coaches', href: '/coaches' },
+  { id: 'Coaches',   icon: '👤', label: 'Coaches',  href: '/coaches' },
+  { id: 'Rules',     icon: '📋', label: 'Rules',    href: '/rules' },
   { id: 'Timeline',  icon: '📜', label: 'Timeline', href: '/timeline' },
   { id: 'Sync',      icon: '🔄', label: 'Sync' },
 ]
@@ -4569,6 +4570,7 @@ export default function App() {
             {!isMobile && (
               <>
                 <a href="/coaches" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>👤 COACHES</a>
+                <a href="/rules" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📋 RULES</a>
                 <a href="/timeline" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📜 TIMELINE</a>
                 <a href="/stream-watcher" style={{ color: C.muted, fontSize: 13, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textDecoration: 'none', whiteSpace: 'nowrap' }}>📺 STREAM</a>
               </>
