@@ -119,8 +119,33 @@ function winPct(w, l) {
   return ((w / total) * 100).toFixed(1) + '%'
 }
 
+// ── Personal record for mid-season hires ───────────────────────
+// Returns {wins, losses} counting only games for `team` in `season`
+// from week `hireWeek` onwards. Returns null if no hire_week set.
+function calcPersonalRecord(games, team, season, hireWeek) {
+  if (!hireWeek || !team) return null
+  const teamNorm = team.toLowerCase().trim()
+  const relevant = games.filter(g => {
+    if (!g.is_final) return false
+    if (Number(g.season) !== Number(season)) return false
+    if (Number(g.week) < Number(hireWeek)) return false
+    const home = (g.home_team || '').toLowerCase().trim()
+    const away = (g.away_team || '').toLowerCase().trim()
+    return home === teamNorm || away === teamNorm
+  })
+  let wins = 0, losses = 0
+  for (const g of relevant) {
+    const isHome = (g.home_team || '').toLowerCase().trim() === teamNorm
+    const teamScore = isHome ? g.home_score : g.away_score
+    const oppScore  = isHome ? g.away_score : g.home_score
+    if (teamScore > oppScore) wins++
+    else losses++
+  }
+  return { wins, losses }
+}
+
 // ── Coach Card (summary view) ──────────────────────────────────
-function CoachCard({ coach, onSelect, isCommissioner, championships = [], teams = [], currentSeason = 1 }) {
+function CoachCard({ coach, onSelect, isCommissioner, championships = [], teams = [], currentSeason = 1, games = [] }) {
   const achievements = coach.achievements || []
   const accentColor  = coach.team_color || C.accent
   const coachChamps  = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
@@ -136,6 +161,9 @@ function CoachCard({ coach, onSelect, isCommissioner, championships = [], teams 
   const latestSeason = hasLiveRecord
     ? { season: currentSeason, wins: liveSeasonW, losses: liveSeasonL }
     : (coach.season_records || []).slice(-1)[0]
+
+  // Personal record: only games since they joined (mid-season hires)
+  const personalRecord = calcPersonalRecord(games, coach.team, currentSeason, coach.hire_week)
 
   return (
     <Card onClick={() => onSelect(coach)} style={{ position: 'relative', borderColor: coach.team_color ? coach.team_color + '55' : C.border }}>
@@ -189,9 +217,19 @@ function CoachCard({ coach, onSelect, isCommissioner, championships = [], teams 
         )}
         {latestSeason && (
           <div>
-            <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>S{latestSeason.season}</div>
-            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.text }}>
+            <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
+              {personalRecord ? 'Team S' : 'S'}{latestSeason.season}
+            </div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: personalRecord ? C.muted : C.text }}>
               <span style={{ color: C.green }}>{latestSeason.wins}</span>–<span style={{ color: C.red }}>{latestSeason.losses}</span>
+            </div>
+          </div>
+        )}
+        {personalRecord && (
+          <div>
+            <div style={{ color: C.accent, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Since Wk {coach.hire_week}</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.text }}>
+              <span style={{ color: C.green }}>{personalRecord.wins}</span>–<span style={{ color: C.red }}>{personalRecord.losses}</span>
             </div>
           </div>
         )}
@@ -385,7 +423,7 @@ function SeasonRecordEditor({ records = [], onChange }) {
 }
 
 // ── Coach detail / edit modal ──────────────────────────────────
-function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [], isMobile = false }) {
+function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [], isMobile = false, games = [], currentSeason = 1 }) {
   const coachChamps = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
   const [editing, setEditing]   = useState(false)
   const [saving,  setSaving]    = useState(false)
@@ -588,16 +626,31 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
               <div style={{ marginBottom: 20 }}>
                 <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Season Records</div>
                 <div style={{ display: 'grid', gap: 6 }}>
-                  {[...(form.season_records || [])].reverse().map((r, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '8px 12px', background: C.surface, borderRadius: 6 }}>
-                      <Badge color={C.blue}>S{r.season}</Badge>
-                      <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18 }}>
-                        <span style={{ color: C.green }}>{r.wins}</span>–<span style={{ color: C.red }}>{r.losses}</span>
-                      </span>
-                      <span style={{ color: C.accent, fontSize: 13 }}>{winPct(r.wins, r.losses)}</span>
-                      {r.finish && <span style={{ color: C.muted, fontSize: 13 }}>{r.finish}</span>}
-                    </div>
-                  ))}
+                  {[...(form.season_records || [])].reverse().map((r, i) => {
+                    const isCurrent = Number(r.season) === Number(currentSeason)
+                    const pr = isCurrent ? calcPersonalRecord(games, form.team, currentSeason, form.hire_week) : null
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '8px 12px', background: C.surface, borderRadius: 6, flexWrap: 'wrap' }}>
+                        <Badge color={C.blue}>S{r.season}</Badge>
+                        <div>
+                          {pr && <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Team</div>}
+                          <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18, color: pr ? C.muted : C.text }}>
+                            <span style={{ color: C.green }}>{r.wins}</span>–<span style={{ color: C.red }}>{r.losses}</span>
+                          </span>
+                        </div>
+                        {pr && (
+                          <div>
+                            <div style={{ color: C.accent, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Since Wk {form.hire_week}</div>
+                            <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 18 }}>
+                              <span style={{ color: C.green }}>{pr.wins}</span>–<span style={{ color: C.red }}>{pr.losses}</span>
+                            </span>
+                          </div>
+                        )}
+                        {!pr && <span style={{ color: C.accent, fontSize: 13 }}>{winPct(r.wins, r.losses)}</span>}
+                        {r.finish && <span style={{ color: C.muted, fontSize: 13 }}>{r.finish}</span>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -638,6 +691,7 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
               </div>
               <Input label="Gamertag / Username" {...field('username')} placeholder="@handle" />
               <Input label="Joined Dynasty (date)" type="date" {...field('hire_date')} />
+              <Input label="Mid-Season Hire Week (leave blank if joined at start)" type="number" value={form.hire_week ?? ''} onChange={e => setForm(f => ({ ...f, hire_week: e.target.value ? Number(e.target.value) : null }))} placeholder="e.g. 14" />
               <Input label="Alma Mater (fav real school)" {...field('alma_mater')} placeholder="e.g. Alabama" />
               <div>
                 <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Coaching Style</label>
@@ -855,6 +909,7 @@ export default function CoachesPage() {
   const [showPinGate, setShowPinGate] = useState(false)
 
   const [championships, setChampionships] = useState([])
+  const [games,         setGames]         = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -867,6 +922,7 @@ export default function CoachesPage() {
     setCoaches(coachData.coaches || [])
     setTeams(teamData.teams || [])
     setChampionships(teamData.championships || [])
+    setGames(teamData.games || [])
     setCurrentSeason(teamData.settings?.current_season ?? 1)
     setLoading(false)
   }, [])
@@ -987,7 +1043,7 @@ export default function CoachesPage() {
             : (
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: isMobile ? 10 : 16 }}>
                 {shown.map(c => (
-                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} teams={teams} currentSeason={currentSeason} />
+                  <CoachCard key={c.id} coach={c} onSelect={setSelected} isCommissioner={!!commPin} championships={championships} teams={teams} currentSeason={currentSeason} games={games} />
                 ))}
               </div>
             )
@@ -1012,6 +1068,8 @@ export default function CoachesPage() {
             onClose={handleClose}
             championships={championships}
             isMobile={isMobile}
+            games={games}
+            currentSeason={currentSeason}
           />
         )}
 
