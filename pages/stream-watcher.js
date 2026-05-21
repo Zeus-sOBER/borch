@@ -315,15 +315,78 @@ export default function StreamWatcher() {
   const [countdown, setCountdown]     = useState(0)
   const [activeTab, setActiveTab]     = useState('scoreboard')
   const [history, setHistory]         = useState({ bigMoments: [], recruitingEvents: [], streamEvents: [] })
+  const [clips, setClips]             = useState([])
+  const [clipsLoading, setClipsLoading] = useState(false)
+  const [connectedChannels, setConnectedChannels] = useState([])
+  const [clipSetupMsg, setClipSetupMsg] = useState(null)
+  const [gameCtxForm, setGameCtxForm] = useState({ channel_name: '', season: '', week: '', home_team: '', away_team: '', pin: '' })
+  const [gameCtxSaving, setGameCtxSaving] = useState(false)
 
   const timerRef    = useRef(null)
   const countdownRef = useRef(null)
 
-  // Load channel from localStorage
+  const fetchClips = useCallback(async () => {
+    setClipsLoading(true)
+    try {
+      const res  = await fetch('/api/clips?limit=30')
+      const data = await res.json()
+      setClips(data.clips || [])
+    } catch (e) { console.error(e) }
+    setClipsLoading(false)
+  }, [])
+
+  const fetchConnectedChannels = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/twitch-channel')
+      const data = await res.json()
+      setConnectedChannels(data.channels || [])
+    } catch (e) { console.error(e) }
+  }, [])
+
+  const saveGameContext = async () => {
+    setGameCtxSaving(true)
+    try {
+      const res  = await fetch('/api/twitch-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_name:      gameCtxForm.channel_name,
+          current_season:    gameCtxForm.season    ? Number(gameCtxForm.season)  : null,
+          current_week:      gameCtxForm.week      ? Number(gameCtxForm.week)    : null,
+          current_home_team: gameCtxForm.home_team || null,
+          current_away_team: gameCtxForm.away_team || null,
+          pin:               gameCtxForm.pin,
+        }),
+      })
+      const data = await res.json()
+      if (data.error) { alert(data.error); setGameCtxSaving(false); return }
+      fetchConnectedChannels()
+    } catch (e) { alert(e.message) }
+    setGameCtxSaving(false)
+  }
+
+  // Load channel from localStorage + check OAuth redirect result
   useEffect(() => {
     const saved = localStorage.getItem('dynasty_twitch_channel')
     if (saved) { setChannel(saved); setSavedChannel(saved) }
     fetchHistory()
+    fetchClips()
+    fetchConnectedChannels()
+
+    // Show result of OAuth redirect
+    const params = new URLSearchParams(window.location.search)
+    const setup  = params.get('clip_setup')
+    if (setup === 'success') {
+      const ch = params.get('channel')
+      setClipSetupMsg({ ok: true, text: `✅ ${ch} connected! "🎬 Clip It!" reward created on your channel.` })
+      window.history.replaceState({}, '', '/stream-watcher')
+    } else if (setup === 'error') {
+      setClipSetupMsg({ ok: false, text: `❌ Setup failed: ${params.get('msg') || 'unknown error'}` })
+      window.history.replaceState({}, '', '/stream-watcher')
+    } else if (setup === 'denied') {
+      setClipSetupMsg({ ok: false, text: '❌ Twitch authorization was denied.' })
+      window.history.replaceState({}, '', '/stream-watcher')
+    }
   }, [])
 
   const fetchHistory = useCallback(async () => {
@@ -394,6 +457,7 @@ export default function StreamWatcher() {
     { id: 'scoreboard', label: '🏈 Live Game' },
     { id: 'moments',    label: `⚡ Moments (${history.bigMoments.length})` },
     { id: 'recruiting', label: `🎯 Recruiting (${history.recruitingEvents.length})` },
+    { id: 'clips',      label: `✂️ Clips (${clips.length})` },
     { id: 'lore',       label: '📖 Dynasty Lore' },
   ]
 
@@ -446,6 +510,98 @@ export default function StreamWatcher() {
             AI watches your CFB26 Twitch stream and automatically updates dynasty data
           </p>
         </div>
+
+        {/* ── Clip Setup Panel ──────────────────────────────────── */}
+        <Card style={{ marginBottom: 20, borderColor: C.purple + '55' }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.purple, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
+            ✂️ Voice Clip Setup
+          </div>
+
+          {clipSetupMsg && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: clipSetupMsg.ok ? C.green + '15' : C.red + '15', color: clipSetupMsg.ok ? C.green : C.red, fontSize: 13 }}>
+              {clipSetupMsg.text}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {/* Left: connect button */}
+            <div style={{ flex: '0 0 auto' }}>
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 8, lineHeight: 1.5, maxWidth: 260 }}>
+                Each streamer connects their Twitch account once. We automatically create a <strong style={{ color: C.text }}>"🎬 Clip It!"</strong> Channel Points reward on their channel.
+              </div>
+              <a href="/api/twitch-oauth" style={{
+                display: 'inline-block',
+                background: '#9146ff', color: '#fff',
+                borderRadius: 6, padding: '10px 20px',
+                fontFamily: "'Oswald', sans-serif", fontSize: 13,
+                letterSpacing: 0.5, textTransform: 'uppercase',
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}>
+                🔗 Connect Twitch Account
+              </a>
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                After connecting: redeem Channel Points<br />
+                or say "clip it" via VoiceAttack → !clip
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, background: C.border, alignSelf: 'stretch', flexShrink: 0 }} />
+
+            {/* Right: game context setter */}
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
+                Set Game Context for Clips
+              </div>
+              {connectedChannels.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ color: C.muted, fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Channel</label>
+                  <select value={gameCtxForm.channel_name} onChange={e => {
+                    const ch = connectedChannels.find(c => c.channel_name === e.target.value)
+                    setGameCtxForm(f => ({ ...f, channel_name: e.target.value, season: ch?.current_season || '', week: ch?.current_week || '', home_team: ch?.current_home_team || '', away_team: ch?.current_away_team || '' }))
+                  }} style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 13 }}>
+                    <option value="">— select connected channel —</option>
+                    {connectedChannels.map(c => (
+                      <option key={c.channel_name} value={c.channel_name}>
+                        {c.channel_name}{c.current_week ? ` (S${c.current_season} W${c.current_week}: ${c.current_home_team} vs ${c.current_away_team})` : ' (no game set)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {connectedChannels.length === 0 && (
+                <div style={{ color: C.muted, fontSize: 13, marginBottom: 10, fontStyle: 'italic' }}>No channels connected yet.</div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[
+                  ['Season', 'season', 'number', '1'],
+                  ['Week',   'week',   'number', '3'],
+                  ['Home Team', 'home_team', 'text', 'Alabama'],
+                  ['Away Team', 'away_team', 'text', 'Georgia'],
+                ].map(([label, key, type, placeholder]) => (
+                  <div key={key}>
+                    <label style={{ color: C.muted, fontSize: 10, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</label>
+                    <input type={type} value={gameCtxForm[key]} placeholder={placeholder}
+                      onChange={e => setGameCtxForm(f => ({ ...f, [key]: e.target.value }))}
+                      style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '7px 10px', color: C.text, fontSize: 13, boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                <input type="password" value={gameCtxForm.pin} placeholder="Commissioner PIN"
+                  onChange={e => setGameCtxForm(f => ({ ...f, pin: e.target.value }))}
+                  style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '7px 10px', color: C.text, fontSize: 13 }} />
+                <button onClick={saveGameContext} disabled={gameCtxSaving || !gameCtxForm.channel_name || !gameCtxForm.pin} style={{
+                  background: C.purple, color: '#fff', border: 'none', borderRadius: 6,
+                  padding: '8px 16px', cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+                  fontSize: 12, letterSpacing: 0.5, whiteSpace: 'nowrap', opacity: (!gameCtxForm.channel_name || !gameCtxForm.pin) ? 0.4 : 1,
+                }}>
+                  {gameCtxSaving ? 'Saving...' : '💾 Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
 
         {/* Control panel */}
         <Card style={{ marginBottom: 24 }}>
@@ -619,6 +775,70 @@ export default function StreamWatcher() {
               Recruiting Events
             </div>
             <RecruitingFeed events={history.recruitingEvents} />
+          </Card>
+        )}
+
+        {activeTab === 'clips' && (
+          <Card>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.accent, letterSpacing: 2, textTransform: 'uppercase' }}>
+                Game Clips
+              </div>
+              <button onClick={fetchClips} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 5, padding: '4px 12px', color: C.muted, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1 }}>
+                ↻ Refresh
+              </button>
+            </div>
+
+            {clipsLoading && <div style={{ color: C.muted, fontSize: 13 }}>Loading clips...</div>}
+
+            {!clipsLoading && clips.length === 0 && (
+              <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: '32px 0' }}>
+                <div style={{ fontSize: 32, marginBottom: 10 }}>✂️</div>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: C.text, marginBottom: 8 }}>No clips yet</div>
+                <div style={{ lineHeight: 1.6 }}>
+                  Start the clip bot and type <code style={{ background: C.subtle, padding: '1px 6px', borderRadius: 4, color: C.accent }}>!clip</code> in chat
+                  {' '}(or say "clip it" via VoiceAttack).
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gap: 16 }}>
+              {clips.map(clip => (
+                <div key={clip.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+                  {/* Thumbnail / embed */}
+                  {clip.thumbnail_url && (
+                    <a href={clip.clip_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
+                      <img src={clip.thumbnail_url} alt={clip.title} style={{ width: '100%', display: 'block', maxHeight: 220, objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00000055' }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#000000aa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>▶</div>
+                      </div>
+                    </a>
+                  )}
+                  <div style={{ padding: '12px 14px' }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.text, marginBottom: 6 }}>{clip.title || 'Untitled Clip'}</div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {clip.week && (
+                        <span style={{ background: C.accent + '22', color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 4, padding: '2px 8px', fontSize: 11, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>
+                          WK {clip.week}
+                        </span>
+                      )}
+                      {clip.home_team && clip.away_team && (
+                        <span style={{ color: C.muted, fontSize: 12 }}>{clip.home_team} vs {clip.away_team}</span>
+                      )}
+                      {clip.duration && (
+                        <span style={{ color: C.muted, fontSize: 12 }}>{clip.duration}s</span>
+                      )}
+                      {clip.triggered_by && (
+                        <span style={{ color: C.muted, fontSize: 12 }}>by @{clip.triggered_by}</span>
+                      )}
+                      <a href={clip.clip_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', color: C.blue, fontSize: 12, textDecoration: 'none', fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>
+                        WATCH ON TWITCH →
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
         )}
 

@@ -20,5 +20,9 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.3"
+  },
+  "optionalDependencies": {
+    "tmi.js": "^1.8.5",
+    "node-fetch": "^2.7.0"
   }
 }
