@@ -269,25 +269,41 @@ export default async function handler(req, res) {
         return `${result} vs ${opponent} (${myScore}-${oppScore}, Wk${g.week}${gameLabel})`;
       }).join(', ');
 
-      // Past championships for this coach
+      // Past championships — only attribute to this coach if their name is on it.
+      // A team championship won before this coach arrived must NOT be credited to them.
       const coachChamps = (championships || []).filter(ch =>
-        ch.team_name?.toLowerCase() === c.team?.toLowerCase() ||
         ch.coach_name?.toLowerCase() === c.name?.toLowerCase()
       );
+      // Championships the team won under a different coach (inherited legacy)
+      const teamChamps = (championships || []).filter(ch =>
+        ch.team_name?.toLowerCase() === c.team?.toLowerCase() &&
+        ch.coach_name?.toLowerCase() !== c.name?.toLowerCase()
+      );
       const champStr = coachChamps.length > 0
-        ? `Championships (${coachChamps.length}): ` + coachChamps.map(ch => {
+        ? `Personal championships (${coachChamps.length}): ` + coachChamps.map(ch => {
             const parts = [`Season ${ch.season}`, ch.record || null];
             if (ch.opponent_team) parts.push(`def. ${ch.opponent_team}${ch.opponent_record ? ` (${ch.opponent_record})` : ''} ${ch.result || ''}`);
             return parts.filter(Boolean).join(', ');
           }).join(' | ')
-        : 'No championships yet';
+        : 'No personal championships';
+      const inheritedStr = teamChamps.length > 0
+        ? `Team history (won by previous coaches): ` + teamChamps.map(ch =>
+            `Season ${ch.season} under Coach ${ch.coach_name || 'unknown'}`
+          ).join(', ')
+        : '';
+      // Flag mid-season hires so the AI never invents a full-season narrative for them
+      const midSeasonNote = c.hire_week
+        ? `⚠️ MID-SEASON HIRE: ${c.name} joined at Week ${c.hire_week}. Do NOT attribute any games before Week ${c.hire_week} to this coach. Do NOT credit them with any team championships or records from before they arrived.`
+        : '';
 
       return [
         `Coach: ${c.name} | Team: ${c.team} | Record: ${record}`,
+        midSeasonNote,
         c.coaching_style ? `  Style: ${c.coaching_style}` : '',
         c.bio        ? `  Bio: ${c.bio}` : '',
         recentResults ? `  Recent: ${recentResults}` : '',
-        `  ${champStr}`
+        `  ${champStr}`,
+        inheritedStr ? `  ${inheritedStr}` : '',
       ].filter(Boolean).join('\n');
     }).join('\n\n');
 
@@ -296,10 +312,10 @@ export default async function handler(req, res) {
       ? teams.map((t, i) => {
           const tName = t.name || t.team_name || ''
           const coach = coaches.find(c => c.team?.toLowerCase() === tName.toLowerCase());
-          const champs = (championships || []).filter(
-            ch => ch.team_name?.toLowerCase() === tName.toLowerCase()
-          );
-          const champBadge = champs.length > 0 ? ` 🏆x${champs.length}` : '';
+          const coachChampCount = coach ? (championships || []).filter(
+            ch => ch.coach_name?.toLowerCase() === coach.name?.toLowerCase()
+          ).length : 0;
+          const champBadge = coachChampCount > 0 ? ` 🏆x${coachChampCount}` : '';
           const apRank = getApRank(tName);
           const apBadge = apRank ? ` [AP #${apRank}]` : '';
           return `#${i + 1} ${tName} (${t.wins}-${t.losses})${champBadge}${apBadge}${coach ? ` — Coach: ${coach.name}` : ''}`;
@@ -370,9 +386,10 @@ ABSOLUTE RULES:
 3. NEVER invent stats, scores, or game results. Only use data explicitly provided below. If a game is not in the data, it has NOT been played — do not speculate or fabricate a score.
 4. If no games have been played yet for a given team or week, say so honestly — do not fill in fictional results.
 5. Adjust tone to match season phase — early = hopeful, late = urgent, playoff = electric.
-6. Reference championship history where relevant — it adds legacy and stakes.
-7. Tone: ESPN-professional with personality. Light rivalry trash talk welcome.
-8. AP RANKINGS: Whenever you mention a team that appears in the AP Top 25, always include their ranking inline — e.g. "#4 Alabama" or "No. 4 Alabama". This applies to every mention of every ranked team throughout the article.
+6. Championship history: ONLY credit a coach with championships listed under "Personal championships". "Team history" entries were won by a previous coach — you may mention the program's history but NEVER say the current coach won it.
+7. Mid-season hires (marked ⚠️ MID-SEASON HIRE): treat them as a fresh start. Their story is about debut and early impressions, NOT the team's season before they arrived.
+8. Tone: ESPN-professional with personality. Light rivalry trash talk welcome.
+9. AP RANKINGS: Whenever you mention a team that appears in the AP Top 25, always include their ranking inline — e.g. "#4 Alabama" or "No. 4 Alabama". This applies to every mention of every ranked team throughout the article.
 
 THE ${coaches.length} COACHES IN THIS LEAGUE:
 ${coachProfiles}
