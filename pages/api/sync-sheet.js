@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: 'Sheet is empty — nothing to parse' })
     }
 
-    // ── 3. Fetch already-finalized games so Claude skips them ────────────────
+    // ── 3. Fetch already-finalized games so we can strip them from the CSV ──────
     const { data: finalizedRows } = await supabase
       .from('games')
       .select('week, home_team, away_team')
@@ -71,14 +71,25 @@ export default async function handler(req, res) {
       .eq('is_final', true)
     const finalizedGames = finalizedRows || []
 
+    // Strip finalized rows from the CSV before Claude ever sees them.
+    // Any row that contains BOTH team names AND the matching week number for a
+    // finalized game is removed so we never burn tokens re-parsing settled data.
+    const filteredCsv = preFilterFinalizedRows(csvText, finalizedGames)
+
+    // If everything is already finalized and nothing is left to parse, bail early.
+    const csvLines = filteredCsv.trim().split('\n').filter(l => l.trim())
+    if (csvLines.length <= 1) {
+      return res.status(200).json({ success: true, message: 'All rows already finalized — nothing new to parse', upserted: 0, errors: 0 })
+    }
+
     // ── 4. Parse with AI (only new/updated games) ─────────────────────────────
     const coachList = (coaches || []).map(c => `${c.name} (${c.team})`).join(', ') || 'No coaches loaded yet'
-    const parsedResult = await parseScheduleSheet(csvText, coaches || [], humanTeams, coachList, finalizedGames)
+    const parsedResult = await parseScheduleSheet(filteredCsv, coaches || [], humanTeams, coachList)
 
-    // ── 4. Save to Supabase ───────────────────────────────────────────────────
+    // ── 5. Save to Supabase ───────────────────────────────────────────────────
     const saveResult = await saveGames(parsedResult.games || [], currentSeason)
 
-    // ── 5. Log the sync ───────────────────────────────────────────────────────
+    // ── 6. Log the sync ───────────────────────────────────────────────────────
     await supabase.from('scan_log').insert({
       file_id:        sheetId,
       file_name:      'Dynasty_Schedule_Template (auto-sync)',
@@ -107,19 +118,37 @@ export default async function handler(req, res) {
   }
 }
 
-// ─── AI Parser ────────────────────────────────────────────────────────────────
-async function parseScheduleSheet(csvText, coaches, humanTeams, coachList, finalizedGames = []) {
-  const skipList = finalizedGames.length > 0
-    ? `\nALREADY FINALIZED IN DATABASE — SKIP THESE (do not include in output):\n` +
-      finalizedGames.map(g => `  Week ${g.week}: ${g.home_team} vs ${g.away_team}`).join('\n') +
-      `\n\nOnly output games NOT in the above list, OR scheduled games that now have a score.\n`
-    : ''
+// ─── Pre-filter finalized rows from CSV ──────────────────────────────────────
+// Strips rows that correspond to games already marked is_final in the DB so
+// Claude never wastes tokens re-parsing settled results.
+function preFilterFinalizedRows(csvText, finalizedGames) {
+  if (!finalizedGames.length) return csvText
+  const norm = (s) => (s || '').toLowerCase().trim()
+  return csvText
+    .split('\n')
+    .filter(line => {
+      const lower = line.toLowerCase()
+      for (const game of finalizedGames) {
+        const t1 = norm(game.home_team)
+        const t2 = norm(game.away_team)
+        const weekStr = String(game.week)
+        // Row must mention both team names AND the exact week to be filtered out
+        if (t1 && t2 && lower.includes(t1) && lower.includes(t2) && line.includes(weekStr)) {
+          return false
+        }
+      }
+      return true
+    })
+    .join('\n')
+}
 
+// ─── AI Parser ────────────────────────────────────────────────────────────────
+async function parseScheduleSheet(csvText, coaches, humanTeams, coachList) {
   const prompt = `You are importing a college football dynasty league schedule/results from a spreadsheet.
 
 HUMAN COACHES IN THIS LEAGUE: ${coachList}
 HUMAN-COACHED TEAMS: ${humanTeams.join(', ') || 'unknown'}
-${skipList}
+
 The spreadsheet may contain BOTH upcoming scheduled games AND completed games with scores.
 Handle both types:
 
@@ -166,8 +195,8 @@ Return ONLY a JSON object (no markdown, no explanation):
 }
 
 Rules:
-- "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
-- Week 16 = "conference_championship", weeks 17-20 = playoff/bowl
+- "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_first_round", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
+- Week 16 = "conference_championship", week 17 = "cfp_first_round", week 18 = "cfp_quarterfinal", week 19 = "cfp_semifinal", week 20+ = "national_championship"
 - Include ALL game rows, not just human-team games
 - Week 0 is valid — keep it as 0
 - Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3
