@@ -121,20 +121,43 @@ export default async function handler(req, res) {
 // ─── Pre-filter finalized rows from CSV ──────────────────────────────────────
 // Strips rows that correspond to games already marked is_final in the DB so
 // Claude never wastes tokens re-parsing settled results.
+//
+// IMPORTANT: uses exact week number comparison (parsed from the first CSV field)
+// rather than a substring search. A substring search causes false-positives —
+// e.g. weekStr "1" would match any row containing "16", "10", "11", etc.,
+// silently dropping rematches in later weeks.
 function preFilterFinalizedRows(csvText, finalizedGames) {
   if (!finalizedGames.length) return csvText
   const norm = (s) => (s || '').toLowerCase().trim()
+
+  // Build a quick lookup: "week|teamA|teamB" (teams sorted) → true
+  const finalizedSet = new Set()
+  for (const game of finalizedGames) {
+    const t1 = norm(game.home_team)
+    const t2 = norm(game.away_team)
+    if (!t1 || !t2) continue
+    const key = `${game.week}|${[t1, t2].sort().join('|')}`
+    finalizedSet.add(key)
+  }
+
   return csvText
     .split('\n')
     .filter(line => {
       const lower = line.toLowerCase()
+
+      // Parse the week from the first comma-delimited field so we get an exact
+      // number — not a substring. "16" → 16, not matched by week 1 or week 6.
+      const firstField = line.split(',')[0].trim()
+      const rowWeek = Number(firstField)
+      if (isNaN(rowWeek) || firstField === '') return true  // header / section row — keep
+
+      // Check every combination of teams that appear in this row
       for (const game of finalizedGames) {
+        if (game.week !== rowWeek) continue  // exact week match required
         const t1 = norm(game.home_team)
         const t2 = norm(game.away_team)
-        const weekStr = String(game.week)
-        // Row must mention both team names AND the exact week to be filtered out
-        if (t1 && t2 && lower.includes(t1) && lower.includes(t2) && line.includes(weekStr)) {
-          return false
+        if (t1 && t2 && lower.includes(t1) && lower.includes(t2)) {
+          return false  // this row is already finalized — strip it
         }
       }
       return true

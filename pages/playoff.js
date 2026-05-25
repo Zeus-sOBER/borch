@@ -79,14 +79,13 @@ function TeamLogo({ team, size = 28 }) {
 }
 
 // ── Game card used in all bracket columns ─────────────────────────────────────
-function GameCard({ game, records, highlight = false, compact = false }) {
+function GameCard({ game, records, highlight = false, compact = false, fullWidth = false }) {
   if (!game) {
     return (
       <div style={{
         background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 8,
-        padding: compact ? '10px 12px' : '12px 14px',
-        opacity: 0.4, textAlign: 'center', fontSize: 11, color: C.muted,
-        fontFamily: "'Oswald', sans-serif", letterSpacing: 1,
+        padding: '14px 12px', opacity: 0.35, textAlign: 'center',
+        fontSize: 12, color: C.muted, fontFamily: "'Oswald', sans-serif", letterSpacing: 1,
       }}>TBD</div>
     )
   }
@@ -95,30 +94,35 @@ function GameCard({ game, records, highlight = false, compact = false }) {
   const final = is_final && home_score != null && away_score != null && !(home_score === 0 && away_score === 0)
   const homeWon = final && home_score > away_score
   const awayWon = final && away_score > home_score
+  const logoSize = fullWidth ? 26 : compact ? 18 : 22
 
   const TeamRow = ({ team, score, won, isAway }) => {
     const rec = records?.[team]
     const recStr = rec ? `${rec.wins}-${rec.losses}` : null
     return (
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: compact ? '5px 0' : '7px 0',
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: fullWidth ? '9px 0' : '6px 0',
         borderBottom: isAway ? `1px solid ${C.border}` : 'none',
-        opacity: final && !won ? 0.55 : 1,
+        opacity: final && !won ? 0.5 : 1,
       }}>
-        <TeamLogo team={team} size={compact ? 20 : 24} />
+        <TeamLogo team={team} size={logoSize} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: compact ? 12 : 13, fontWeight: 700, color: won ? C.accent : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{
+            fontSize: fullWidth ? 14 : compact ? 12 : 13,
+            fontWeight: 700, color: won ? C.accent : C.text,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
             {team || 'TBD'}
           </div>
-          {recStr && (
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{recStr}</div>
-          )}
+          {recStr && <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{recStr}</div>}
         </div>
         {final && (
           <div style={{
-            fontFamily: "'Oswald', sans-serif", fontSize: compact ? 16 : 18,
-            fontWeight: 700, color: won ? C.accent : C.muted, minWidth: 28, textAlign: 'right',
+            fontFamily: "'Oswald', sans-serif",
+            fontSize: fullWidth ? 22 : compact ? 16 : 18,
+            fontWeight: 700, color: won ? C.accent : C.muted,
+            minWidth: 32, textAlign: 'right', flexShrink: 0,
           }}>{score}</div>
         )}
       </div>
@@ -128,9 +132,8 @@ function GameCard({ game, records, highlight = false, compact = false }) {
   return (
     <div style={{
       background: highlight ? C.accent + '0d' : C.card,
-      border: `1px solid ${highlight ? C.accent + '44' : C.border}`,
-      borderRadius: 8, padding: compact ? '8px 10px' : '10px 12px',
-      transition: 'border-color 0.2s',
+      border: `1px solid ${highlight ? C.accent + '55' : C.border}`,
+      borderRadius: 8, padding: fullWidth ? '12px 16px' : compact ? '8px 10px' : '10px 12px',
     }}>
       <TeamRow team={away_team} score={away_score} won={awayWon} isAway />
       <TeamRow team={home_team} score={home_score} won={homeWon} isAway={false} />
@@ -140,7 +143,7 @@ function GameCard({ game, records, highlight = false, compact = false }) {
         </div>
       )}
       {!final && (
-        <div style={{ fontSize: 10, color: C.muted, marginTop: 4, textAlign: 'right', fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>
+        <div style={{ fontSize: 10, color: C.muted, marginTop: 5, textAlign: 'right', fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>
           SCHEDULED
         </div>
       )}
@@ -303,18 +306,18 @@ function ChampionBanner({ game }) {
   return (
     <div style={{
       background: `linear-gradient(135deg, ${C.accent}22 0%, ${C.surface} 100%)`,
-      border: `2px solid ${C.accent}88`, borderRadius: 12, padding: '24px 28px',
-      textAlign: 'center', marginBottom: 32,
+      border: `2px solid ${C.accent}88`, borderRadius: 12,
+      padding: '20px 16px', textAlign: 'center', marginBottom: 24,
     }}>
-      <div style={{ fontSize: 32, marginBottom: 8 }}>🏆</div>
-      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 3, color: C.accent, textTransform: 'uppercase', marginBottom: 6 }}>National Champion</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 8 }}>
-        <TeamLogo team={champ} size={48} />
-        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 32, fontWeight: 700, color: C.accent }}>{champ}</div>
+      <div style={{ fontSize: 28, marginBottom: 6 }}>🏆</div>
+      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 3, color: C.accent, textTransform: 'uppercase', marginBottom: 8 }}>National Champion</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+        <TeamLogo team={champ} size={40} />
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, fontWeight: 700, color: C.accent }}>{champ}</div>
       </div>
-      <div style={{ fontSize: 13, color: C.muted }}>
-        def. {loser} · <span style={{ color: C.text, fontWeight: 600 }}>{score}</span>
-        {game.notes ? ` · ${game.notes}` : ''}
+      <div style={{ fontSize: 12, color: C.muted }}>
+        def. <span style={{ color: C.text }}>{loser}</span> · <span style={{ color: C.text, fontWeight: 600 }}>{score}</span>
+        {game.notes ? <span> · {game.notes}</span> : null}
       </div>
     </div>
   )
@@ -358,7 +361,7 @@ export default function PlayoffBracket() {
         <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet" />
       </Head>
       <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '16px 12px' : '24px 24px' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '12px 12px 80px' : '24px 24px' }}>
 
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -414,77 +417,100 @@ export default function PlayoffBracket() {
               const ncgGames = bracket.national_championship
               const ncg = ncgGames?.[0] || null
 
+              // Build the ordered list of rounds to display
+              const rounds = [
+                bracket.cfp_first_round.length > 0 && {
+                  key: 'r1', label: 'First Round', sub: 'Week 17',
+                  games: bracket.cfp_first_round, highlight: false,
+                },
+                {
+                  key: 'qf', label: 'Quarterfinals', sub: 'Week 18',
+                  games: bracket.cfp_quarterfinal.length ? bracket.cfp_quarterfinal : Array(4).fill(null),
+                  highlight: false,
+                },
+                {
+                  key: 'sf', label: 'Semifinals', sub: 'Week 19',
+                  games: bracket.cfp_semifinal.length ? bracket.cfp_semifinal : Array(2).fill(null),
+                  highlight: false,
+                },
+                {
+                  key: 'ncg', label: '🏆 National Championship', sub: 'Week 20',
+                  games: ncgGames.length ? ncgGames : [null],
+                  highlight: true,
+                },
+              ].filter(Boolean)
+
+              if (isMobile) {
+                // ── MOBILE: stacked full-width sections ──────────────────────
+                return (
+                  <div>
+                    {ncg?.is_final && <ChampionBanner game={ncg} />}
+                    {rounds.map(round => (
+                      <div key={round.key} style={{ marginBottom: 28 }}>
+                        {/* Round header */}
+                        <div style={{
+                          display: 'flex', alignItems: 'baseline', gap: 10,
+                          marginBottom: 12, paddingBottom: 8,
+                          borderBottom: `1px solid ${round.highlight ? C.accent + '44' : C.border}`,
+                        }}>
+                          <div style={{
+                            fontFamily: "'Oswald', sans-serif", fontSize: 15, fontWeight: 700,
+                            letterSpacing: 1, textTransform: 'uppercase',
+                            color: round.highlight ? C.accent : C.text,
+                          }}>{round.label}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>{round.sub}</div>
+                          <div style={{ marginLeft: 'auto', fontSize: 10, color: C.muted }}>
+                            {round.games.filter(g => g?.is_final).length}/{round.games.filter(Boolean).length} final
+                          </div>
+                        </div>
+                        {/* Full-width game cards */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {round.games.map((g, i) => (
+                            <GameCard key={g?.id ?? i} game={g} records={records}
+                              highlight={round.highlight} fullWidth />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              }
+
+              // ── DESKTOP: side-by-side columns ────────────────────────────
               return (
                 <div>
-                  {/* Champion banner */}
                   {ncg?.is_final && <ChampionBanner game={ncg} />}
-
-                  {/* Bracket columns */}
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: isMobile ? 'column' : 'row',
-                    gap: isMobile ? 24 : 16,
-                    alignItems: isMobile ? 'stretch' : 'flex-start',
-                  }}>
-                    {bracket.cfp_first_round.length > 0 && (
-                      <RoundColumn
-                        label="First Round" sublabel="Week 17"
-                        games={bracket.cfp_first_round} records={records}
-                        isMobile={isMobile}
-                      />
-                    )}
-
-                    <RoundColumn
-                      label="Quarterfinals" sublabel="Week 18"
-                      games={bracket.cfp_quarterfinal.length ? bracket.cfp_quarterfinal : Array(4).fill(null)}
-                      records={records} isMobile={isMobile}
-                    />
-
-                    <RoundColumn
-                      label="Semifinals" sublabel="Week 19"
-                      games={bracket.cfp_semifinal.length ? bracket.cfp_semifinal : Array(2).fill(null)}
-                      records={records} isMobile={isMobile}
-                    />
-
-                    {/* NCG — slightly wider, always shown */}
-                    <div style={{ flex: 1, minWidth: isMobile ? '100%' : 180, maxWidth: isMobile ? '100%' : 280 }}>
-                      <div style={{
-                        textAlign: 'center', marginBottom: 12,
-                        paddingBottom: 10, borderBottom: `1px solid ${C.accent + '44'}`,
-                      }}>
-                        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.accent }}>
-                          🏆 National Championship
-                        </div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>Week 20</div>
-                        {ncgGames.length > 0 && (
-                          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                            {ncgGames.filter(g => g?.is_final).length}/{ncgGames.length} played
+                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', overflowX: 'auto' }}>
+                    {rounds.map(round => (
+                      <div key={round.key} style={{ flex: 1, minWidth: 200, maxWidth: 280 }}>
+                        <div style={{
+                          textAlign: 'center', marginBottom: 12,
+                          paddingBottom: 10,
+                          borderBottom: `1px solid ${round.highlight ? C.accent + '44' : C.border}`,
+                        }}>
+                          <div style={{
+                            fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 700,
+                            letterSpacing: 1.5, textTransform: 'uppercase',
+                            color: round.highlight ? C.accent : C.text,
+                          }}>{round.label}</div>
+                          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{round.sub}</div>
+                          <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>
+                            {round.games.filter(g => g?.is_final).length}/{round.games.filter(Boolean).length} played
                           </div>
-                        )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {round.games.map((g, i) => (
+                            <GameCard key={g?.id ?? i} game={g} records={records} highlight={round.highlight} />
+                          ))}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {ncgGames.length > 0
-                          ? ncgGames.map((g, i) => <GameCard key={g?.id ?? i} game={g} records={records} highlight />)
-                          : <GameCard game={null} records={records} highlight />
-                        }
-                      </div>
-                    </div>
+                    ))}
                   </div>
-
-                  {/* Legend */}
-                  {!isMobile && (
-                    <div style={{ marginTop: 24, padding: 12, background: C.surface, borderRadius: 6, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 11, color: C.muted }}>
-                        <span style={{ color: C.accent, fontWeight: 700 }}>Gold name</span> = winner
-                      </div>
-                      <div style={{ fontSize: 11, color: C.muted }}>
-                        <span style={{ color: C.muted, fontWeight: 700 }}>W-L</span> = season record at time of game
-                      </div>
-                      <div style={{ fontSize: 11, color: C.muted }}>
-                        Live data — updates automatically when results are entered in the sheet
-                      </div>
-                    </div>
-                  )}
+                  <div style={{ marginTop: 20, padding: 10, background: C.surface, borderRadius: 6, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 11, color: C.muted }}><span style={{ color: C.accent, fontWeight: 700 }}>Gold name</span> = winner</div>
+                    <div style={{ fontSize: 11, color: C.muted }}><span style={{ fontWeight: 700 }}>W-L</span> = full-season record</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>Updates automatically when scores are entered in the sheet</div>
+                  </div>
                 </div>
               )
             })()}

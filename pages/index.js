@@ -215,6 +215,7 @@ const ALL_NAV_ITEMS = [
   { id: 'Season',    icon: '📅', label: 'Season' },
   { id: 'Media',     icon: '📰', label: 'Media' },
   { id: 'Awards',    icon: '🏆', label: 'Awards' },
+  { id: 'Bracket',   icon: '🏆', label: 'Bracket',  href: '/playoff' },
   { id: 'Coaches',   icon: '👤', label: 'Coaches',  href: '/coaches' },
   { id: 'Rules',     icon: '📋', label: 'Rules',    href: '/rules' },
   { id: 'Timeline',  icon: '📜', label: 'Timeline', href: '/timeline' },
@@ -785,6 +786,50 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
           </Card>
         )}
       </div>
+
+      {/* ── PLAYOFF BRACKET BANNER ── */}
+      {(() => {
+        const playoffTypes = new Set(['conference_championship','cfp_first_round','cfp_quarterfinal','cfp_semifinal','national_championship','bowl'])
+        const playoffGames = games.filter(g => playoffTypes.has(g.game_type))
+        const champion = playoffGames.find(g => g.game_type === 'national_championship' && gameIsFinal(g))
+        const champName = champion
+          ? (champion.home_score > champion.away_score ? champion.home_team : champion.away_team)
+          : null
+        const activeCFP = playoffGames.some(g => g.game_type !== 'bowl')
+        if (!activeCFP) return null
+        return (
+          <a href="/playoff" style={{ textDecoration: 'none', display: 'block', marginBottom: 20 }}>
+            <div style={{
+              background: champName
+                ? `linear-gradient(135deg, ${C.accent}22 0%, ${C.surface} 100%)`
+                : `linear-gradient(135deg, ${C.surface} 0%, #1a1a2e 100%)`,
+              border: `1px solid ${champName ? C.accent + '66' : C.border}`,
+              borderRadius: 10, padding: isMobile ? '14px 16px' : '16px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ fontSize: isMobile ? 28 : 36, flexShrink: 0 }}>{champName ? '🏆' : '🏈'}</div>
+                <div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', marginBottom: 3 }}>
+                    {champName ? 'National Champion' : 'CFP Bracket · Live'}
+                  </div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.text }}>
+                    {champName || 'Playoff Bracket & Results'}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                    {champName
+                      ? `def. ${champion.home_score > champion.away_score ? champion.away_team : champion.home_team} · ${Math.max(champion.home_score, champion.away_score)}–${Math.min(champion.home_score, champion.away_score)}`
+                      : `${playoffGames.filter(g => gameIsFinal(g)).length} of ${playoffGames.length} games final · tap to view bracket`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.accent, letterSpacing: 1.5, textTransform: 'uppercase', flexShrink: 0 }}>
+                View Bracket →
+              </div>
+            </div>
+          </a>
+        )
+      })()}
 
       {/* ── THREE COLUMNS: Top Teams | Recent Articles | Stat Leaders ── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr 240px', gap: 20, marginBottom: 24, alignItems: 'start' }}>
