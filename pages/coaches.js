@@ -425,10 +425,13 @@ function SeasonRecordEditor({ records = [], onChange }) {
 // ── Coach detail / edit modal ──────────────────────────────────
 function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, championships = [], isMobile = false, games = [], currentSeason = 1 }) {
   const coachChamps = championships.filter(ch => ch.coach_name === coach.name && ch.championship_type === 'national')
-  const [editing, setEditing]   = useState(false)
-  const [saving,  setSaving]    = useState(false)
-  const [form,    setForm]      = useState({ ...coach })
-  const [error,   setError]     = useState(null)
+  const [editing,       setEditing]       = useState(false)
+  const [saving,        setSaving]        = useState(false)
+  const [form,          setForm]          = useState({ ...coach })
+  const [error,         setError]         = useState(null)
+  const [teamChangeOpen, setTeamChangeOpen] = useState(false)
+  const [teamChangeForm, setTeamChangeForm] = useState({ new_team: '', season_leaving: currentSeason, notes: '' })
+  const [teamChangeSaving, setTeamChangeSaving] = useState(false)
 
   // Auto-link team_id if coach has a team name but no team_id yet
   useEffect(() => {
@@ -484,6 +487,44 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
       body: JSON.stringify({ pin }),
     })
     onClose(true)
+  }
+
+  const logTeamChange = async () => {
+    if (!teamChangeForm.new_team.trim()) return
+    setTeamChangeSaving(true)
+    setError(null)
+
+    // Append the old team to coaching_history before updating
+    const history = [...(form.coaching_history || []), {
+      team:           form.team,
+      from_season:    (form.coaching_history?.length > 0
+                        ? form.coaching_history[form.coaching_history.length - 1].to_season + 1
+                        : 1),
+      to_season:      teamChangeForm.season_leaving,
+      notes:          teamChangeForm.notes || null,
+    }]
+
+    try {
+      const res = await fetch(`/api/coaches/${coach.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin,
+          team:             teamChangeForm.new_team.trim(),
+          team_id:          teams.find(t => t.name?.toLowerCase() === teamChangeForm.new_team.trim().toLowerCase())?.id ?? null,
+          coaching_history: history,
+          hire_week:        0,
+          hire_date:        new Date().toISOString().split('T')[0],
+        }),
+      })
+      const data = await res.json()
+      if (data.error) { setError(data.error); setTeamChangeSaving(false); return }
+      setForm({ ...data.coach })
+      setTeamChangeOpen(false)
+      setTeamChangeForm({ new_team: '', season_leaving: currentSeason, notes: '' })
+      onSave(data.coach)
+    } catch (e) { setError(e.message) }
+    setTeamChangeSaving(false)
   }
 
   return (
@@ -655,9 +696,98 @@ function CoachDetail({ coach, teams = [], isCommissioner, pin, onSave, onClose, 
               </div>
             )}
 
+            {/* Coaching History */}
+            {(form.coaching_history || []).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                  🏫 Coaching History
+                </div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {[...(form.coaching_history || [])].reverse().map((h, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: C.surface, borderRadius: 6, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 700, color: C.text, fontSize: 14 }}>{h.team}</span>
+                        {h.notes && <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>· {h.notes}</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {h.from_season && <Badge color={C.blue}>S{h.from_season}</Badge>}
+                        {h.to_season && h.to_season !== h.from_season && <><span style={{ color: C.muted, fontSize: 11 }}>→</span><Badge color={C.blue}>S{h.to_season}</Badge></>}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Current team */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: C.accent + '11', border: `1px solid ${C.accent}33`, borderRadius: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 700, color: C.accent, fontSize: 14 }}>{form.team}</span>
+                      <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>· Current</span>
+                    </div>
+                    <Badge color={C.accent}>S{currentSeason}</Badge>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Team Change Panel (commissioner only) */}
+            {isCommissioner && teamChangeOpen && (
+              <div style={{ marginBottom: 20, padding: 16, background: C.surface, border: `1px solid ${C.orange}44`, borderRadius: 8 }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.orange, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+                  🔄 Log Team Change
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>New Team *</label>
+                    {teams.length > 0 ? (
+                      <select
+                        value={teamChangeForm.new_team}
+                        onChange={e => setTeamChangeForm(f => ({ ...f, new_team: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontSize: 13 }}
+                      >
+                        <option value="">— select new team —</option>
+                        {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        value={teamChangeForm.new_team}
+                        onChange={e => setTeamChangeForm(f => ({ ...f, new_team: e.target.value }))}
+                        placeholder="e.g. Oregon State"
+                        style={{ width: '100%', padding: '8px 10px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Leaving After Season</label>
+                      <input
+                        type="number" min="1"
+                        value={teamChangeForm.season_leaving}
+                        onChange={e => setTeamChangeForm(f => ({ ...f, season_leaving: Number(e.target.value) }))}
+                        style={{ width: '100%', padding: '8px 10px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Notes (optional)</label>
+                      <input
+                        value={teamChangeForm.notes}
+                        onChange={e => setTeamChangeForm(f => ({ ...f, notes: e.target.value }))}
+                        placeholder="e.g. Left for bigger program"
+                        style={{ width: '100%', padding: '8px 10px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <Btn onClick={logTeamChange} disabled={teamChangeSaving || !teamChangeForm.new_team}>
+                      {teamChangeSaving ? 'Saving…' : `Move to ${teamChangeForm.new_team || '…'}`}
+                    </Btn>
+                    <Btn outline onClick={() => setTeamChangeOpen(false)}>Cancel</Btn>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isCommissioner && (
-              <div style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
                 <Btn onClick={() => setEditing(true)}>✏️ Edit Profile</Btn>
+                {!teamChangeOpen && <Btn outline color={C.orange} onClick={() => setTeamChangeOpen(true)}>🔄 Log Team Change</Btn>}
                 {form.is_active && <Btn outline color={C.red} onClick={deactivate}>Remove Coach</Btn>}
               </div>
             )}

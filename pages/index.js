@@ -1608,7 +1608,7 @@ function Season({ games, teams, isMobile, settings, articles, onArticleOpen, onA
   const seasonApRankings = settings?.ap_rankings || []
 
   const weeksWithGames = new Set(games.map(g => g.week).filter(w => w != null))
-  const allWeeks = Array.from({ length: 19 }, (_, i) => i) // 0–18
+  const allWeeks = Array.from({ length: 21 }, (_, i) => i) // 0–20
   const weekGames = games.filter(g => g.week === selectedWeek)
   const phase = getPhase(selectedWeek)
 
@@ -3086,7 +3086,7 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
   const week = settings?.current_week ?? 0
 
   const setWeek = async (newWeek) => {
-    if (newWeek < 0 || newWeek > 18) return
+    if (newWeek < 0 || newWeek > 20) return
     setSaving(true); setMsg(null)
     try {
       const res = await fetch('/api/league-settings', {
@@ -3109,14 +3109,14 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
   }
 
   const PHASE_LABEL = (w) => {
-    if (w === 0) return 'Kickoff Weekend'
-    if (w <= 4)  return 'Early Season'
-    if (w <= 9)  return 'Conference Play'
-    if (w <= 15) return 'Late Season'
+    if (w === 0)  return 'Kickoff Weekend'
+    if (w <= 4)   return 'Early Season'
+    if (w <= 9)   return 'Conference Play'
+    if (w <= 15)  return 'Late Season'
     if (w === 16) return 'Conf. Championships'
-    if (w === 17) return 'CFP First Round'
-    if (w === 18) return 'CFP Quarterfinals'
-    if (w === 19) return 'CFP Semifinals'
+    if (w === 17) return 'Bowl Week 1'
+    if (w === 18) return 'Bowl Week 2'
+    if (w === 19) return 'Bowl Week 3'
     return 'National Championship'
   }
 
@@ -3159,20 +3159,31 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
         {/* Increment */}
         <button
           onClick={() => setWeek(week + 1)}
-          disabled={saving || week >= 18}
+          disabled={saving || week >= 20}
           style={{
-            background: week >= 18 ? C.surface : C.accent,
-            color: week >= 18 ? C.subtle : '#000',
-            border: `1px solid ${week >= 18 ? C.border : C.accent}`,
+            background: week >= 20 ? C.surface : C.accent,
+            color: week >= 20 ? C.subtle : '#000',
+            border: `1px solid ${week >= 20 ? C.border : C.accent}`,
             borderRadius: 8, width: 44, height: 44, fontSize: 22,
-            cursor: week >= 18 ? 'not-allowed' : 'pointer',
+            cursor: week >= 20 ? 'not-allowed' : 'pointer',
             fontFamily: "'Oswald', sans-serif", flexShrink: 0,
           }}
         >+</button>
 
         {/* Quick-set buttons */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-          {[0,1,5,10,14].map(w => (
+          {[
+            { w: 0,  label: 'Wk 0' },
+            { w: 1,  label: 'Wk 1' },
+            { w: 5,  label: 'Wk 5' },
+            { w: 10, label: 'Wk 10' },
+            { w: 14, label: 'Wk 14' },
+            { w: 16, label: 'Conf' },
+            { w: 17, label: 'Bowl 1' },
+            { w: 18, label: 'Bowl 2' },
+            { w: 19, label: 'Bowl 3' },
+            { w: 20, label: 'Natl' },
+          ].map(({ w, label }) => (
             <button
               key={w}
               onClick={() => setWeek(w)}
@@ -3181,11 +3192,11 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
                 background: week === w ? C.purple + '33' : C.surface,
                 color: week === w ? C.purple : C.muted,
                 border: `1px solid ${week === w ? C.purple + '66' : C.border}`,
-                borderRadius: 6, padding: '6px 12px',
+                borderRadius: 6, padding: '6px 10px',
                 cursor: 'pointer',
-                fontFamily: "'Oswald', sans-serif", fontSize: 12,
+                fontFamily: "'Oswald', sans-serif", fontSize: 11,
               }}
-            >Wk {w}</button>
+            >{label}</button>
           ))}
         </div>
       </div>
