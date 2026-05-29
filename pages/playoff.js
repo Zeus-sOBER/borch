@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Head from 'next/head'
+import { supabase } from '../lib/supabase'
 
 const C = {
   bg: '#09090b', surface: '#101014', card: '#17171d', border: '#1f1f2e',
@@ -325,10 +326,10 @@ function ChampionBanner({ game }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PlayoffBracket() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [tab, setTab]         = useState('bracket')
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [tab, setTab]           = useState('bracket')
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -338,12 +339,25 @@ export default function PlayoffBracket() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     fetch('/api/playoff-data')
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
   }, [])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  // Auto-refresh whenever Supabase game rows change
+  useEffect(() => {
+    const channel = supabase
+      .channel('playoff-games-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => {
+        loadData()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadData])
 
   const TABS = [
     { id: 'bracket',  label: '🏆 CFP Bracket' },
@@ -379,7 +393,7 @@ export default function PlayoffBracket() {
                 padding: '8px 16px', background: C.surface, border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.text, textDecoration: 'none', fontSize: 12, fontWeight: 600,
               }}>+ Submit Result</a>
-              <button onClick={() => { setLoading(true); fetch('/api/playoff-data').then(r=>r.json()).then(d=>{setData(d);setLoading(false)}).catch(()=>setLoading(false)) }}
+              <button onClick={() => { setLoading(true); loadData() }}
                 style={{ padding: '8px 14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: 'pointer', fontSize: 12 }}>
                 ↻ Refresh
               </button>
@@ -420,17 +434,17 @@ export default function PlayoffBracket() {
               // Build the ordered list of rounds to display
               const rounds = [
                 bracket.cfp_first_round.length > 0 && {
-                  key: 'r1', label: 'First Round', sub: 'Week 17',
+                  key: 'r1', label: 'Bowl Week 1', sub: 'Week 17',
                   games: bracket.cfp_first_round, highlight: false,
                 },
-                {
-                  key: 'qf', label: 'Quarterfinals', sub: 'Week 18',
-                  games: bracket.cfp_quarterfinal.length ? bracket.cfp_quarterfinal : Array(4).fill(null),
+                bracket.cfp_quarterfinal.length > 0 && {
+                  key: 'qf', label: 'Bowl Week 2', sub: 'Week 18',
+                  games: bracket.cfp_quarterfinal,
                   highlight: false,
                 },
-                {
-                  key: 'sf', label: 'Semifinals', sub: 'Week 19',
-                  games: bracket.cfp_semifinal.length ? bracket.cfp_semifinal : Array(2).fill(null),
+                bracket.cfp_semifinal.length > 0 && {
+                  key: 'sf', label: 'Bowl Week 3', sub: 'Week 19',
+                  games: bracket.cfp_semifinal,
                   highlight: false,
                 },
                 {

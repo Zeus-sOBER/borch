@@ -219,7 +219,7 @@ Return ONLY a JSON object (no markdown, no explanation):
 
 Rules:
 - "game_type" must be one of: "regular", "conference_championship", "bowl", "cfp_first_round", "cfp_quarterfinal", "cfp_semifinal", "national_championship"
-- Week 16 = "conference_championship", week 17 = "cfp_first_round", week 18 = "cfp_quarterfinal", week 19 = "cfp_semifinal", week 20+ = "national_championship"
+- Week 16 = "conference_championship", week 17 = "cfp_first_round" (Bowl Week 1), week 18 = "cfp_quarterfinal" (Bowl Week 2), week 19 = "cfp_semifinal" (Bowl Week 3), week 20+ = "national_championship"
 - Include ALL game rows, not just human-team games
 - Week 0 is valid — keep it as 0
 - Be precise with scores — a 70-3 score means the winner had 70 points, loser had 3

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react'
 import Head from 'next/head'
+import { supabase } from '../lib/supabase'
 
 // Logo override context — lets commissioners fix wrong team logos without code changes
 const LogoCtx = createContext({ overrides: {}, setOverride: () => {}, resetOverrides: () => {} })
@@ -1581,16 +1582,16 @@ function ShareCard({ game, onClose, apRankings = [] }) {
 }
 
 // ── Season ─────────────────────────────────────────────────────
-const WEEK_SHORT = { 0: 'Wk 0', 16: 'Conf Champ', 17: 'CFP R1', 18: 'CFP QF', 19: 'CFP SF', 20: 'Natl Champ' }
+const WEEK_SHORT = { 0: 'Wk 0', 16: 'Conf Champ', 17: 'Bowl Wk 1', 18: 'Bowl Wk 2', 19: 'Bowl Wk 3', 20: 'Natl Champ' }
 const SEASON_PHASES = [
   { range: [0,  0],  label: 'WEEK 0 — KICKOFF',      sub: 'Early openers · Non-conference · Dynasty begins here' },
   { range: [1,  4],  label: 'EARLY SEASON',           sub: 'Non-conference play · Records still forming' },
   { range: [5,  9],  label: 'CONFERENCE PLAY',        sub: 'Division races taking shape · Every loss stings' },
-  { range: [10, 15], label: 'LATE SEASON',            sub: 'Rivalry week incoming · CFP positioning is everything' },
-  { range: [16, 16], label: 'CONF. CHAMPIONSHIPS',    sub: 'Top 2 per conference · Trophies and CFP bids on the line' },
-  { range: [17, 17], label: 'CFP FIRST ROUND',        sub: '12-team playoff begins · Road to the national title starts here' },
-  { range: [18, 18], label: 'CFP QUARTERFINALS',      sub: '8 teams remain · One loss and your season is over' },
-  { range: [19, 19], label: 'CFP SEMIFINALS',         sub: 'Final four · Two spots in the National Championship' },
+  { range: [10, 15], label: 'LATE SEASON',            sub: 'Rivalry week incoming · Bowl season positioning is everything' },
+  { range: [16, 16], label: 'CONF. CHAMPIONSHIPS',    sub: 'Top 2 per conference · Trophies and bowl bids on the line' },
+  { range: [17, 17], label: 'BOWL WEEK 1',            sub: 'Bowl season begins · Postseason glory on the line' },
+  { range: [18, 18], label: 'BOWL WEEK 2',            sub: 'Bigger bowls · The field is narrowing' },
+  { range: [19, 19], label: 'BOWL WEEK 3',            sub: 'Final four · Two spots in the National Championship' },
   { range: [20, 99], label: 'NATIONAL CHAMPIONSHIP',  sub: 'One game · One champion · Dynasty legacy on the line' },
 ]
 function getPhase(w) {
@@ -4492,6 +4493,19 @@ export default function App() {
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchNarrative() }, [fetchNarrative])
   useEffect(() => { fetchArticles() }, [fetchArticles])
+
+  // ── Supabase Realtime — re-fetch whenever any game row changes ──────────────
+  // This means the dashboard updates automatically as soon as scores are entered
+  // in the sheet and synced to Supabase — no manual refresh needed.
+  useEffect(() => {
+    const channel = supabase
+      .channel('games-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => {
+        fetchData()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchData])
 
   // Restore commissioner PIN from session
   useEffect(() => {
