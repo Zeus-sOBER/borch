@@ -539,6 +539,8 @@ FORMAT:
 
       userPrompt = `Write a League-Wide Matchup Preview for ${weekLabel} of the Dynasty Universe season.
 
+⚠️ MATCHUP AUTHORITY RULE: The "UPCOMING MATCHUPS" section below is the ONLY source of truth for which teams are playing each other this week. Each block is one game. Do NOT merge teams from different games into a single matchup. Do NOT use matchup pairings from narrative history — the narrative is for context (streaks, story arcs) only, not for determining who is playing whom.
+
 UPCOMING MATCHUPS:
 ${matchupBlocks || 'No upcoming games found between user-coached teams.'}
 
