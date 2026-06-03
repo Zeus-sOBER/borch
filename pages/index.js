@@ -3031,12 +3031,15 @@ function ArticleSlideUp({ article, onClose, isMobile }) {
 
 // ── Week Controls (commissioner-only) ─────────────────────────
 function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh }) {
-  const [saving, setSaving]           = useState(false)
-  const [msg, setMsg]                 = useState(null)
+  const [saving, setSaving]               = useState(false)
+  const [msg, setMsg]                     = useState(null)
   const [recalculating, setRecalculating] = useState(false)
-  const [recalcMsg, setRecalcMsg]     = useState(null)
-  const [deduping, setDeduping]       = useState(false)
-  const [dedupMsg, setDedupMsg]       = useState(null)
+  const [recalcMsg, setRecalcMsg]         = useState(null)
+  const [deduping, setDeduping]           = useState(false)
+  const [dedupMsg, setDedupMsg]           = useState(null)
+  const [finalizing, setFinalizing]       = useState(false)
+  const [finalizeMsg, setFinalizeMsg]     = useState(null)
+  const [finalizeConfirm, setFinalizeConfirm] = useState(false)
 
   const dedupGames = async () => {
     setDeduping(true)
@@ -3263,6 +3266,89 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
         {dedupMsg && (
           <div style={{ marginTop: 8, color: dedupMsg.ok ? C.green : C.red, fontSize: 12 }}>
             {dedupMsg.ok ? '✅' : '❌'} {dedupMsg.text}
+          </div>
+        )}
+      </div>
+
+      {/* ── Finalize Season ── */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.accent}44` }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.accent, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+          🏆 Finalize Season {settings?.current_season ?? 1}
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 12, lineHeight: 1.6 }}>
+          Run this once the National Championship result is in. It will:
+          <ul style={{ margin: '6px 0 0 16px', padding: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <li>Create the championship record and update the Dynasty Champions card</li>
+            <li>Backfill the Dynasty Timeline with every game from this season</li>
+            <li>Generate the AI season retrospective ("30-for-30" article)</li>
+            <li>Advance the league to Season {(settings?.current_season ?? 1) + 1}</li>
+          </ul>
+        </div>
+
+        {!finalizeConfirm ? (
+          <button
+            onClick={() => setFinalizeConfirm(true)}
+            style={{
+              background: C.accent + '15', color: C.accent,
+              border: `1px solid ${C.accent}66`,
+              borderRadius: 6, padding: '10px 20px',
+              cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+              fontSize: 13, letterSpacing: 0.5, minHeight: 42,
+            }}
+          >🏆 Finalize Season {settings?.current_season ?? 1}</button>
+        ) : (
+          <div style={{ background: C.accent + '0d', border: `1px solid ${C.accent}44`, borderRadius: 8, padding: 14 }}>
+            <div style={{ color: C.accent, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              This will advance the league to Season {(settings?.current_season ?? 1) + 1}. Are you sure?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={async () => {
+                  setFinalizing(true)
+                  setFinalizeMsg(null)
+                  setFinalizeConfirm(false)
+                  try {
+                    const res = await fetch('/api/finalize-season', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ pin: commPin, season: settings?.current_season ?? 1 }),
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                      setFinalizeMsg({ ok: true, text: `✅ Season ${data.nextSeason - 1} finalized! ${data.champion} are champions. Advanced to Season ${data.nextSeason}.` })
+                      onRefresh?.()
+                    } else {
+                      setFinalizeMsg({ ok: false, text: data.error || 'Finalization failed' })
+                    }
+                  } catch (e) {
+                    setFinalizeMsg({ ok: false, text: e.message })
+                  }
+                  setFinalizing(false)
+                }}
+                disabled={finalizing}
+                style={{
+                  background: C.accent, color: '#000',
+                  border: 'none', borderRadius: 6, padding: '10px 20px',
+                  cursor: finalizing ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Oswald', sans-serif", fontSize: 13, fontWeight: 700,
+                  opacity: finalizing ? 0.6 : 1,
+                }}
+              >{finalizing ? '⏳ Finalizing...' : 'Yes, Finalize'}</button>
+              <button
+                onClick={() => setFinalizeConfirm(false)}
+                style={{
+                  background: C.surface, color: C.muted,
+                  border: `1px solid ${C.border}`, borderRadius: 6, padding: '10px 16px',
+                  cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 13,
+                }}
+              >Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {finalizeMsg && (
+          <div style={{ marginTop: 10, color: finalizeMsg.ok ? C.green : C.red, fontSize: 12, lineHeight: 1.5 }}>
+            {finalizeMsg.text}
           </div>
         )}
       </div>
