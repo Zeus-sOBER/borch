@@ -281,8 +281,8 @@ Write 600-900 words. Include:
       edited_by:    'commissioner',
     })
 
-    // Log as a top-weight narrative entry so it appears in the timeline
-    await logNarrativeEvent({
+    // Log as a top-weight lore entry so it appears in the Timeline → Lore tab
+    const { error: loreErr } = await supabase.from('narrative_log').insert({
       event_type:          'lore',
       season:              Number(season),
       week:                99,
@@ -294,7 +294,12 @@ Write 600-900 words. Include:
       narrative_weight:    5,
       momentum_tags:       ['championship', 'season-end', 'lore'],
       is_season_highlight: true,
+      include_in_context:  true,
     })
+    if (loreErr) {
+      console.error('[finalize-season] lore insert error:', loreErr.message)
+      steps.push({ step: 'lore_insert', ok: false, error: loreErr.message })
+    }
 
     summaryTitle = headline
     steps.push({ step: 'season_summary', ok: true, title: headline })
