@@ -158,7 +158,7 @@ Tags options: upset, blowout, close, shutout, rivalry, bowl, cfp, championship, 
     let narrativeError = null
     try {
       const aiRes = await anthropic.messages.create({
-        model: 'claude-haiku-4-20250514',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 3000,
         messages: [{ role: 'user', content: narrativePrompt }],
       })

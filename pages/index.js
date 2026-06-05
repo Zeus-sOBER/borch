@@ -3369,30 +3369,35 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
           >
             {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Season {s}</option>)}
           </select>
-          <button
-            onClick={async () => {
-              const sel = document.getElementById('backfill-season-select')
-              const targetSeason = Number(sel?.value || 1)
-              const res = await fetch('/api/backfill-timeline', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pin: commPin, season: targetSeason }),
-              })
-              const data = await res.json()
-              if (res.ok) {
-                alert(`✅ ${data.message}${data.insertErrors?.length ? '\n\nErrors:\n' + data.insertErrors.join('\n') : ''}${data.aiError ? '\n\nAI note: ' + data.aiError : ''}`)
-              } else {
-                alert('❌ ' + (data.error || 'Failed'))
-              }
-            }}
-            style={{
-              background: C.surface, color: C.blue,
-              border: `1px solid ${C.blue}66`,
-              borderRadius: 6, padding: '10px 18px',
-              cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
-              fontSize: 13, letterSpacing: 0.5,
-            }}
-          >📅 Backfill Timeline</button>
+          {['📅 Backfill', '🔄 Regenerate'].map((label, idx) => (
+            <button
+              key={label}
+              onClick={async () => {
+                const sel = document.getElementById('backfill-season-select')
+                const targetSeason = Number(sel?.value || 1)
+                const force = idx === 1
+                if (force && !confirm(`Re-generate all AI summaries for Season ${targetSeason}? This will replace the existing plain-text entries.`)) return
+                const res = await fetch('/api/backfill-timeline', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ pin: commPin, season: targetSeason, force }),
+                })
+                const data = await res.json()
+                if (res.ok) {
+                  alert(`✅ ${data.message}${data.aiError ? '\n\nAI note: ' + data.aiError : ''}`)
+                } else {
+                  alert('❌ ' + (data.error || 'Failed'))
+                }
+              }}
+              style={{
+                background: C.surface, color: idx === 1 ? C.accent : C.blue,
+                border: `1px solid ${idx === 1 ? C.accent : C.blue}66`,
+                borderRadius: 6, padding: '10px 18px',
+                cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+                fontSize: 13, letterSpacing: 0.5,
+              }}
+            >{label}</button>
+          ))}
         </div>
       </div>
     </Card>

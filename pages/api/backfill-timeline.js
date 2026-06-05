@@ -26,13 +26,23 @@ function db() {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { pin, season } = req.body || {}
+  const { pin, season, force = false } = req.body || {}
   if (!pin || pin !== process.env.COMMISSIONER_PIN) {
     return res.status(401).json({ error: 'Commissioner PIN required' })
   }
   if (!season) return res.status(400).json({ error: 'season is required' })
 
   const supabase = db()
+
+  // force=true: wipe existing game entries for this season and re-generate with AI summaries
+  if (force) {
+    await supabase
+      .from('narrative_log')
+      .delete()
+      .eq('season', Number(season))
+      .eq('event_type', 'game')
+      .eq('source_table', 'games')
+  }
 
   // ── Load all finalized games for this season ───────────────────────────────
   const { data: allGames, error: gamesErr } = await supabase
@@ -99,7 +109,7 @@ export default async function handler(req, res) {
   let aiError = null
   try {
     const aiRes = await anthropic.messages.create({
-      model: 'claude-haiku-4-20250514',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4000,
       messages: [{
         role: 'user',
