@@ -3352,6 +3352,49 @@ function WeekControls({ settings, commPin, onSettingsUpdate, isMobile, onRefresh
           </div>
         )}
       </div>
+
+      {/* ── Backfill Timeline (safe to run any time) ── */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.blue, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+          📅 Backfill Dynasty Timeline
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+          Populates the Dynasty Timeline with game entries for a past season. Safe to run at any time — only adds entries that aren't already there, never touches the current season or any other data.
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            id="backfill-season-select"
+            defaultValue={Math.max(1, (settings?.current_season ?? 2) - 1)}
+            style={{ padding: '8px 12px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontSize: 13 }}
+          >
+            {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Season {s}</option>)}
+          </select>
+          <button
+            onClick={async () => {
+              const sel = document.getElementById('backfill-season-select')
+              const targetSeason = Number(sel?.value || 1)
+              const res = await fetch('/api/backfill-timeline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: commPin, season: targetSeason }),
+              })
+              const data = await res.json()
+              if (res.ok) {
+                alert(`✅ ${data.message}${data.insertErrors?.length ? '\n\nErrors:\n' + data.insertErrors.join('\n') : ''}${data.aiError ? '\n\nAI note: ' + data.aiError : ''}`)
+              } else {
+                alert('❌ ' + (data.error || 'Failed'))
+              }
+            }}
+            style={{
+              background: C.surface, color: C.blue,
+              border: `1px solid ${C.blue}66`,
+              borderRadius: 6, padding: '10px 18px',
+              cursor: 'pointer', fontFamily: "'Oswald', sans-serif",
+              fontSize: 13, letterSpacing: 0.5,
+            }}
+          >📅 Backfill Timeline</button>
+        </div>
+      </div>
     </Card>
   )
 }
