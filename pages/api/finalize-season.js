@@ -155,50 +155,62 @@ Return ONLY a JSON array, one entry per game, in the same order:
 Weight guide: 1=routine, 3=notable, 4=big upset or rivalry, 5=championship/historic
 Tags options: upset, blowout, close, shutout, rivalry, bowl, cfp, championship, comeback`
 
+    let narrativeError = null
     try {
       const aiRes = await anthropic.messages.create({
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-20250514',
         max_tokens: 3000,
         messages: [{ role: 'user', content: narrativePrompt }],
       })
 
       const raw = aiRes.content[0].text.replace(/```json|```/g, '').trim()
       const match = raw.match(/\[[\s\S]*\]/)
-      if (match) {
-        const narratives = JSON.parse(match[0])
-        for (let i = 0; i < unloggedGames.length; i++) {
-          const g = unloggedGames[i]
-          const n = narratives[i] || {}
-          const winner = g.home_score > g.away_score ? g.home_team : g.away_team
-          const loser  = g.home_score > g.away_score ? g.away_team : g.home_team
-          const winCoach = (coaches || []).find(c => c.team?.toLowerCase() === winner.toLowerCase())
-          const loseCoach = (coaches || []).find(c => c.team?.toLowerCase() === loser.toLowerCase())
+      if (!match) throw new Error('AI did not return valid JSON array')
 
-          await logNarrativeEvent({
-            event_type:          'game',
-            season:              Number(season),
-            week:                g.week,
-            featured_team:       winner,
-            featured_coach:      winCoach?.name || null,
-            opposing_team:       loser,
-            opposing_coach:      loseCoach?.name || null,
-            title:               n.title || `${winner} def. ${loser}`,
-            summary:             n.summary || `${winner} defeated ${loser} ${Math.max(g.home_score,g.away_score)}-${Math.min(g.home_score,g.away_score)}.`,
-            narrative_weight:    n.weight || 3,
-            momentum_tags:       n.tags || [],
-            is_season_highlight: (n.weight || 3) >= 4,
-            source_id:           String(g.id),
-            source_table:        'games',
-          })
+      const narratives = JSON.parse(match[0])
+      const insertErrors = []
+
+      for (let i = 0; i < unloggedGames.length; i++) {
+        const g = unloggedGames[i]
+        const n = narratives[i] || {}
+        const winner = g.home_score > g.away_score ? g.home_team : g.away_team
+        const loser  = g.home_score > g.away_score ? g.away_team : g.home_team
+        const winCoach  = (coaches || []).find(c => c.team?.toLowerCase() === winner.toLowerCase())
+        const loseCoach = (coaches || []).find(c => c.team?.toLowerCase() === loser.toLowerCase())
+
+        const { error: insertErr } = await supabase.from('narrative_log').insert({
+          event_type:          'game',
+          season:              Number(season),
+          week:                g.week,
+          featured_team:       winner,
+          featured_coach:      winCoach?.name || null,
+          opposing_team:       loser,
+          opposing_coach:      loseCoach?.name || null,
+          title:               n.title || `${winner} def. ${loser}`,
+          summary:             n.summary || `${winner} defeated ${loser} ${Math.max(g.home_score,g.away_score)}-${Math.min(g.home_score,g.away_score)}.`,
+          narrative_weight:    n.weight || 3,
+          momentum_tags:       n.tags || [],
+          is_season_highlight: (n.weight || 3) >= 4,
+          source_id:           String(g.id),
+          source_table:        'games',
+          include_in_context:  true,
+        })
+
+        if (insertErr) {
+          insertErrors.push(`game ${g.id}: ${insertErr.message}`)
+        } else {
           timelineLogged++
         }
       }
+
+      if (insertErrors.length) narrativeError = insertErrors.join(' | ')
     } catch (e) {
+      narrativeError = e.message
       console.error('[finalize-season] narrative backfill error:', e.message)
     }
   }
 
-  steps.push({ step: 'timeline_backfill', ok: true, logged: timelineLogged, alreadyExisted: loggedIds.size })
+  steps.push({ step: 'timeline_backfill', ok: !narrativeError, logged: timelineLogged, alreadyExisted: loggedIds.size, error: narrativeError || undefined })
 
   // ── 6. Generate season summary article (the "30-for-30") ──────────────────
   let summaryTitle = null
