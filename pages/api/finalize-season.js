@@ -307,11 +307,16 @@ Write 600-900 words. Include:
     steps.push({ step: 'season_summary', ok: false, error: e.message })
   }
 
-  // ── 7. Advance current_season ──────────────────────────────────────────────
+  // ── 7. Advance current_season + clear stale featured game/article ────────────
   const nextSeason = Number(season) + 1
   const { error: settingsErr } = await supabase
     .from('league_settings')
-    .update({ current_season: nextSeason, current_week: 0 })
+    .update({
+      current_season:      nextSeason,
+      current_week:        0,
+      featured_game_id:    null,   // clear last season's pinned scoreboard
+      featured_article_id: null,   // clear last season's pinned article
+    })
     .eq('id', 1)
 
   steps.push({

@@ -1096,9 +1096,11 @@ function Dashboard({ teams, games, players, scanLog, isMobile, narrativeEntries,
                   background: isDynastyWin ? 'rgba(184,150,12,0.06)' : 'transparent',
                   alignItems: 'center',
                 }}>
-                  {/* Year */}
+                  {/* Year / Season — show "S1" for small season numbers, year for large ones */}
                   <div>
-                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 15, color: isDynastyWin ? '#b8960c' : C.muted, fontWeight: 700 }}>{c.season}</span>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 15, color: isDynastyWin ? '#b8960c' : C.muted, fontWeight: 700 }}>
+                      {c.season < 100 ? `S${c.season}` : c.season}
+                    </span>
                   </div>
                   {/* Champion */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

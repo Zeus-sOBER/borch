@@ -176,15 +176,62 @@ Return ONLY a JSON array, same order as the games:
     }
   }
 
+  // ── Backfill articles from the articles table ─────────────────────────────
+  // Articles written by the app live in the articles table but the timeline
+  // reads from narrative_log. Sync any that aren't already there.
+  let articlesLogged = 0
+  try {
+    const { data: allArticles } = await supabase
+      .from('articles')
+      .select('id, article_type, week, title, content, created_at')
+      .order('created_at', { ascending: true })
+
+    // Find which article IDs are already logged
+    const { data: existingArticleLogs } = await supabase
+      .from('narrative_log')
+      .select('source_id')
+      .eq('season', Number(season))
+      .eq('source_table', 'articles')
+
+    const loggedArticleIds = new Set((existingArticleLogs || []).map(r => String(r.source_id)))
+
+    for (const article of (allArticles || [])) {
+      if (loggedArticleIds.has(String(article.id))) continue
+
+      const isSummary = article.article_type === 'season-summary' || article.article_type === 'season_summary'
+      const isLore    = article.article_type === 'lore'
+
+      const { error: artErr } = await supabase.from('narrative_log').insert({
+        event_type:          isLore ? 'lore' : 'article',
+        season:              Number(season),
+        week:                article.week ?? null,
+        title:               article.title || article.article_type,
+        summary:             (article.content || '').replace(/[#*`_]/g, '').slice(0, 200).trim() + '…',
+        content:             article.content || null,
+        narrative_weight:    isSummary ? 5 : isLore ? 4 : 3,
+        momentum_tags:       isSummary ? ['season-end', 'chronicle'] : isLore ? ['lore'] : ['article'],
+        is_season_highlight: isSummary || isLore,
+        source_id:           String(article.id),
+        source_table:        'articles',
+        include_in_context:  true,
+      })
+
+      if (!artErr) articlesLogged++
+    }
+  } catch (e) {
+    console.error('[backfill-timeline] article sync error:', e.message)
+  }
+
   return res.status(200).json({
-    success:      insertErrors.length === 0,
-    season:       Number(season),
-    total:        finalGames.length,
-    alreadyHad:   loggedIds.size,
+    success:         insertErrors.length === 0,
+    season:          Number(season),
+    total:           finalGames.length,
+    alreadyHad:      loggedIds.size,
     logged,
-    failed:       insertErrors.length,
-    insertErrors: insertErrors.length ? insertErrors : undefined,
-    aiError:      aiError || undefined,
-    message:      `Logged ${logged} of ${unlogged.length} new games into the Season ${season} timeline.`,
+    articlesLogged,
+    failed:          insertErrors.length,
+    insertErrors:    insertErrors.length ? insertErrors : undefined,
+    aiError:         aiError || undefined,
+    message:         `Logged ${logged} of ${unlogged.length} new games + ${articlesLogged} articles into the Season ${season} timeline.`,
   })
 }
